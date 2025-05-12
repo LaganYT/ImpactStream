@@ -59,7 +59,7 @@ export default function Home() {
   return (
     <div className="home">
       <main className="container">
-        <Navbar />
+        <Navbar query={query} setQuery={setQuery} onSearch={searchContent} />
         {/* Trending/Search Results Section */}
         <section className="trending">
           <h2>Trending Now</h2>
