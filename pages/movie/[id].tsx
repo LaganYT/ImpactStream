@@ -44,6 +44,7 @@ export default function MovieDetails() {
           width="100%"
           height="500"
           allowFullScreen
+          sandbox="allow-same-origin allow-forms allow-scripts allow-modals allow-pointer-lock allow-downloads"
         ></iframe>
       </div>
     </div>
