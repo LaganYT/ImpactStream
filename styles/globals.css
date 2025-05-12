@@ -3,7 +3,11 @@
 @tailwind utilities;
 
 body {
-  @apply bg-gray-100 text-gray-900;
+  @apply bg-background text-textPrimary;
   margin: 0;
   font-family: 'Inter', sans-serif;
+}
+
+a {
+  @apply text-accent hover:underline;
 }

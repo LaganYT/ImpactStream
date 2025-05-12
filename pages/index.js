@@ -1,9 +1,11 @@
 import axios from "axios";
 import { useState } from "react";
+import { useRouter } from "next/router";
 
 export default function Home() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
+  const router = useRouter();
 
   const searchContent = async () => {
     const { data } = await axios.get(
@@ -38,7 +40,11 @@ export default function Home() {
       </div>
       <div className="mt-4 grid grid-cols-2 gap-4">
         {results.map((item) => (
-          <div key={item.id} className="border p-2">
+          <div
+            key={item.id}
+            className="border p-2 cursor-pointer"
+            onClick={() => router.push(`/movie/${item.id}`)}
+          >
             <h2 className="font-bold">{item.title || item.name}</h2>
             <p>{item.overview}</p>
           </div>
