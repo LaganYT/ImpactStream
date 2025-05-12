@@ -58,7 +58,6 @@ A way to stream your favorite movies, TV shows, and anime using multiple streami
 ## Technologies Used
 
 - [Next.js](https://nextjs.org/) - React framework for server-side rendering.
-- [Tailwind CSS](https://tailwindcss.com/) - Utility-first CSS framework.
 - [Axios](https://axios-http.com/) - HTTP client for API requests.
 - [TMDB API](https://developer.themoviedb.org/) - For fetching movie, TV show, and anime data.
 

@@ -1,5 +1,5 @@
 body {
-  background-color: #141414;
+  background: linear-gradient(180deg, #141414, #1c1c1c);
   color: #e5e5e5;
   margin: 0;
   font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
@@ -10,23 +10,28 @@ body {
 a {
   color: #e50914;
   text-decoration: none;
-  transition: color 0.2s;
+  font-weight: bold;
+  transition: color 0.3s, text-shadow 0.3s;
 }
 
 a:hover {
   color: #f40612;
+  text-shadow: 0 0 5px #f40612;
 }
 
 button {
-  background-color: #e50914;
+  background: linear-gradient(90deg, #e50914, #f40612);
   color: #fff;
   border: none;
-  padding: 10px 20px;
+  padding: 12px 24px;
   border-radius: 4px;
   cursor: pointer;
-  transition: background-color 0.2s;
+  font-size: 16px;
+  font-weight: bold;
+  transition: transform 0.2s, box-shadow 0.2s;
 }
 
 button:hover {
-  background-color: #f40612;
+  transform: scale(1.05);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
 }
