@@ -52,8 +52,8 @@ export default function MovieDetails() {
   if (!movie) return <div className="loading">Loading...</div>;
 
   return (
-    <div className="movie-details">
-      <div className="movie-card animate-fadeIn">
+    <div className="movie-details-container">
+      <div className="movie-card fade-in">
         <div className="movie-header">
           <img
             src={`https://image.tmdb.org/t/p/w500${movie.poster_path}`}
@@ -62,17 +62,19 @@ export default function MovieDetails() {
           />
           <div className="movie-info">
             <h1 className="movie-title">{movie.title}</h1>
-            <p className="movie-overview">{movie.overview}</p>
-            <div className="movie-meta">
-              <span>Release: {movie.release_date}</span>
-              <span>Rating: {movie.vote_average}</span>
-              <span>Runtime: {movie.runtime} min</span>
+            <p className="movie-description">{movie.overview}</p>
+            <div className="movie-metadata">
+              <span className="metadata-item">Release: {movie.release_date}</span>
+              <span className="metadata-item">Rating: {movie.vote_average}</span>
+              <span className="metadata-item">Runtime: {movie.runtime} min</span>
             </div>
             <div className="api-selector">
-              <label>Streaming API:</label>
+              <label htmlFor="api-select">Streaming API:</label>
               <select
+                id="api-select"
                 value={selectedApi.url}
                 onChange={e => setSelectedApi(STREAM_APIS.find(api => api.url === e.target.value))}
+                className="api-dropdown"
               >
                 {STREAM_APIS.map(api => (
                   <option key={api.url} value={api.url}>{api.name}</option>
@@ -85,6 +87,7 @@ export default function MovieDetails() {
           <iframe
             src={`${selectedApi.url}${id}`}
             allowFullScreen
+            className="movie-iframe"
           ></iframe>
         </div>
       </div>
