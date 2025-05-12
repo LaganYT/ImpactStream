@@ -1,0 +1,150 @@
+/* General Reset */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: #141414;
+  color: #e5e5e5;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  background-color: #e50914;
+  color: #fff;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+button:hover {
+  background-color: #f40612;
+}
+
+/* Navbar */
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 2rem;
+  background-color: #141414;
+  border-bottom: 1px solid #333;
+}
+
+.logo {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #e50914;
+}
+
+.search-bar {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.search-bar input {
+  padding: 0.5rem;
+  border: 1px solid #333;
+  border-radius: 4px;
+  background-color: #222;
+  color: #fff;
+}
+
+/* Hero Section */
+.hero {
+  text-align: center;
+  padding: 4rem 2rem;
+  background: linear-gradient(to bottom, #141414, #222);
+}
+
+.hero h1 {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.hero p {
+  font-size: 1.2rem;
+  color: #b3b3b3;
+}
+
+/* API Selector */
+.api-selector {
+  margin: 2rem auto;
+  text-align: center;
+}
+
+.api-selector label {
+  font-size: 1rem;
+  margin-right: 0.5rem;
+}
+
+.api-selector select {
+  padding: 0.5rem;
+  border: 1px solid #333;
+  border-radius: 4px;
+  background-color: #222;
+  color: #fff;
+}
+
+/* Trending Section */
+.trending {
+  padding: 2rem;
+}
+
+.trending h2 {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+}
+
+.trending-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+}
+
+.trending-item {
+  background-color: #222;
+  border-radius: 8px;
+  overflow: hidden;
+  text-align: center;
+  transition: transform 0.3s ease;
+}
+
+.trending-item:hover {
+  transform: scale(1.05);
+}
+
+.trending-item img {
+  width: 100%;
+  height: auto;
+}
+
+.trending-item h3 {
+  font-size: 1rem;
+  margin: 0.5rem 0;
+}
+
+.trending-item span {
+  font-size: 0.9rem;
+  color: #b3b3b3;
+}
+
+/* Footer */
+.footer {
+  text-align: center;
+  padding: 1rem;
+  background-color: #141414;
+  border-top: 1px solid #333;
+  color: #b3b3b3;
+}
