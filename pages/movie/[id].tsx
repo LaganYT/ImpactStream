@@ -3,13 +3,17 @@ import axios from 'axios';
 import { useEffect, useState } from 'react';
 
 const STREAM_APIS = [
-  { name: "VidSrc.me", url: "https://vidsrc.me/embed/" },
-  { name: "VidSrc.cc", url: "https://vidsrc.cc/embed/" },
-  { name: "Embed.su", url: "https://embed.su/embed/" },
-  { name: "VidLink.pro", url: "https://vidlink.pro/embed/" },
-  { name: "VidSrc.icu", url: "https://vidsrc.icu/embed/" },
+  { name: "VidSrc.me", url: "https://vidsrc.me/embed/movie/" },
+  { name: "Vidsrc.in", url: "https://vidsrc.in/embed/movie/" },
+  { name: "Vidsrc.net", url: "https://vidsrc.net/embed/movie/" },
+  { name: "Vidsrc.pm", url: "https://vidsrc.pm/embed/movie/" },
+  { name: "VidSrc.xyz", url: "https://vidsrc.xyz/embed/movie/" },
+  { name: "VidSrc.cc", url: "https://vidsrc.cc/v3/embed/movie/" },
+  { name: "Embed.su", url: "https://embed.su/embed/movie/" },
+  { name: "VidLink.pro", url: "https://vidlink.pro/movie/" },
+  { name: "VidSrc.icu", url: "https://vidsrc.icu/embed/movie/" },
   { name: "AutoEmbed.cc", url: "https://autoembed.cc/movie/" },
-  { name: "VidSrc.to", url: "https://vidsrc.to/embed/" },
+  { name: "VidSrc.to", url: "https://vidsrc.to/embed/movie/" },
 ];
 
 export default function MovieDetails() {
