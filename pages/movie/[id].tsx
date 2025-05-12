@@ -53,7 +53,7 @@ export default function MovieDetails() {
 
   return (
     <div className="movie-details-container">
-      <div className="movie-card fade-in">
+      <div className="movie-card">
         <div className="movie-header">
           <img
             src={`https://image.tmdb.org/t/p/w500${movie.poster_path}`}
@@ -64,9 +64,9 @@ export default function MovieDetails() {
             <h1 className="movie-title">{movie.title}</h1>
             <p className="movie-description">{movie.overview}</p>
             <div className="movie-metadata">
-              <span className="metadata-item">Release: {movie.release_date}</span>
-              <span className="metadata-item">Rating: {movie.vote_average}</span>
-              <span className="metadata-item">Runtime: {movie.runtime} min</span>
+              <span>Release: {movie.release_date}</span>
+              <span>Rating: {movie.vote_average}</span>
+              <span>Runtime: {movie.runtime} min</span>
             </div>
             <div className="api-selector">
               <label htmlFor="api-select">Streaming API:</label>
@@ -74,7 +74,6 @@ export default function MovieDetails() {
                 id="api-select"
                 value={selectedApi.url}
                 onChange={e => setSelectedApi(STREAM_APIS.find(api => api.url === e.target.value))}
-                className="api-dropdown"
               >
                 {STREAM_APIS.map(api => (
                   <option key={api.url} value={api.url}>{api.name}</option>
