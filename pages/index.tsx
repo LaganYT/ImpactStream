@@ -67,19 +67,6 @@ export default function Home() {
           <p>Discover and stream your favorite movies, TV shows, and anime all in one place.</p>
         </header>
 
-        {/* API Selector */}
-        <div className="api-selector">
-          <label>Streaming API:</label>
-          <select
-            value={selectedApi.url}
-            onChange={e => setSelectedApi(STREAM_APIS.find(api => api.url === e.target.value))}
-          >
-            {STREAM_APIS.map(api => (
-              <option key={api.url} value={api.url}>{api.name}</option>
-            ))}
-          </select>
-        </div>
-
         {/* Trending/Search Results Section */}
         <section className="trending">
           <h2>Trending Now</h2>
