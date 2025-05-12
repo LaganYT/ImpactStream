@@ -1,7 +1,7 @@
 import axios from "axios";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import Header from "../components/Header";
+import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 
 const STREAM_APIS = [
@@ -58,14 +58,8 @@ export default function Home() {
 
   return (
     <div className="home">
-      <Header query={query} setQuery={setQuery} onSearch={searchContent} />
       <main className="container">
-        {/* Hero Section */}
-        <header className="hero">
-          <h1>Welcome to ImpactStream</h1>
-          <p>Discover and stream your favorite movies, TV shows, and anime all in one place.</p>
-        </header>
-
+        <Navbar />
         {/* Trending/Search Results Section */}
         <section className="trending">
           <h2>Trending Now</h2>
