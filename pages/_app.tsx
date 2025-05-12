@@ -8,8 +8,6 @@ export default function App({ Component, pageProps }: AppProps) {
     document.body.classList.add('dark');
   }, []);
   return (
-    <div>
-      <Component {...pageProps} />
-    </div>
+    <Component {...pageProps} />
   );
 }

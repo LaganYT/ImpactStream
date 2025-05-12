@@ -6,8 +6,11 @@ body {
   @apply bg-background text-textPrimary dark:bg-darkBackground dark:text-darkTextPrimary;
   margin: 0;
   font-family: 'Inter', sans-serif;
+  min-height: 100vh;
+  padding-bottom: 60px; /* for footer spacing */
 }
 
 a {
   @apply text-accent hover:underline dark:text-darkAccent;
+  transition: color 0.2s;
 }
