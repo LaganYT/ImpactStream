@@ -37,7 +37,7 @@ export default function Home() {
   };
 
   return (
-    <div className="bg-background min-h-screen text-white">
+    <div className="min-h-screen text-white">
       {/* Navbar */}
       <div className="bg-navbar p-4 flex justify-between items-center shadow-lg">
         <h1 className="text-3xl font-bold text-accent">ImpactStream</h1>
