@@ -60,6 +60,10 @@ export default function Home() {
     <div className="home">
       <main className="container">
         <Navbar query={query} setQuery={setQuery} onSearch={searchContent} />
+        <header className="hero">
+          <h1>Welcome to ImpactStream</h1>
+            <p>Discover and stream your favorite movies, TV shows, and anime all in one place.</p>
+        </header>
         {/* Trending/Search Results Section */}
         <section className="trending">
           <h2>Trending Now</h2>
