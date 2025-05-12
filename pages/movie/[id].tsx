@@ -1,7 +1,6 @@
 import { useRouter } from 'next/router';
 import axios from 'axios';
 import { useEffect, useState } from 'react';
-import Navbar from '../../components/Navbar';
 
 const STREAM_APIS = [
 	{ name: 'VidSrc.me', url: 'https://vidsrc.me/embed/movie/' },

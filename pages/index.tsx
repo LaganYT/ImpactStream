@@ -1,8 +1,6 @@
 import axios from "axios";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import Navbar from "../components/Navbar";
-import Footer from "../components/Footer";
 
 const STREAM_APIS = [
   { name: "VidSrc.me", url: "https://vidsrc.me/embed/" },
