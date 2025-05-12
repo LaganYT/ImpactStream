@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  darkMode: 'class', // Enable dark mode based on class
   content: [
     "./pages/**/*.{js,ts,jsx,tsx}",
     "./components/**/*.{js,ts,jsx,tsx}",
@@ -7,31 +8,24 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        background: "#121212",
-        card: "#1E1E1E",
-        textPrimary: "#FFFFFF",
-        textSecondary: "#B3B3B3",
-        accent: "#BB86FC",
-        accentHover: "#A063E0",
-        navbar: "#1E1E1E",
-        input: "#333333",
-      },
-      fontFamily: {
-        sans: ["Inter", "sans-serif"],
-      },
-      transitionTimingFunction: {
-        DEFAULT: "ease-in-out",
-      },
-      animation: {
-        fadeIn: "fadeIn 0.5s ease-in-out",
-      },
-      keyframes: {
-        fadeIn: {
-          "0%": { opacity: "0" },
-          "100%": { opacity: "1" },
-        },
+        background: '#121212',
+        card: '#1E1E1E',
+        textPrimary: '#FFFFFF',
+        textSecondary: '#A0AEC0',
+        accent: '#64FFDA',
+        accentHover: '#45A692',
+        input: '#2D3748',
+        navbar: '#1A202C',
+        darkBackground: '#000000',
+        darkCard: '#333333',
+        darkTextPrimary: '#FFFFFF',
+        darkTextSecondary: '#A0AEC0',
+        darkAccent: '#64FFDA',
+        darkAccentHover: '#45A692',
+        darkInput: '#4A5568',
+        darkNavbar: '#2D3748',
       },
     },
   },
   plugins: [],
-};
+}

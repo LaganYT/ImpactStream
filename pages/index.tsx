@@ -45,7 +45,7 @@ export default function Home() {
           <input
             type="text"
             placeholder="Search..."
-            className="p-2 rounded bg-input text-white"
+            className="p-2 rounded bg-input text-white dark:bg-darkInput dark:text-darkTextPrimary"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
