@@ -25,19 +25,19 @@ export default function MovieDetails() {
     fetchMovie();
   }, [id]);
 
-  if (!movie) return <div>Loading...</div>;
+  if (!movie) return <div className="text-center text-white">Loading...</div>;
 
   return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4">{movie.title}</h1>
+    <div className="container mx-auto p-4 text-white">
+      <h1 className="text-4xl font-bold mb-4 animate-fadeIn">{movie.title}</h1>
       <div className="mb-4">
         <img
           src={`https://image.tmdb.org/t/p/w500${movie.poster_path}`}
           alt={movie.title}
-          className="rounded"
+          className="rounded shadow-lg transition-transform duration-300 hover:scale-105"
         />
       </div>
-      <p>{movie.overview}</p>
+      <p className="text-textSecondary">{movie.overview}</p>
       <div className="mt-4">
         <iframe
           src={`https://vidsrc.me/embed/${id}`}
@@ -45,6 +45,7 @@ export default function MovieDetails() {
           height="500"
           allowFullScreen
           sandbox="allow-same-origin allow-forms allow-scripts allow-modals allow-pointer-lock allow-downloads"
+          className="rounded shadow-lg"
         ></iframe>
       </div>
     </div>

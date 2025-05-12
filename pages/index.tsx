@@ -4,6 +4,7 @@ import { useRouter } from "next/router";
 
 export default function Home() {
   const [trending, setTrending] = useState([]);
+  const [query, setQuery] = useState("");
   const router = useRouter();
 
   useEffect(() => {
@@ -22,10 +23,43 @@ export default function Home() {
     fetchTrending();
   }, []);
 
+  const searchContent = async () => {
+    const { data } = await axios.get(
+      `https://api.themoviedb.org/3/search/multi`,
+      {
+        params: {
+          api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY,
+          query,
+        },
+      }
+    );
+    setTrending(data.results);
+  };
+
   return (
-    <div className="container mx-auto p-4">
+    <div className="bg-background min-h-screen text-white">
+      {/* Navbar */}
+      <div className="bg-navbar p-4 flex justify-between items-center shadow-lg">
+        <h1 className="text-3xl font-bold text-accent">ImpactStream</h1>
+        <div className="flex items-center space-x-2">
+          <input
+            type="text"
+            placeholder="Search..."
+            className="p-2 rounded bg-input text-white"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          <button
+            onClick={searchContent}
+            className="bg-accent text-white px-4 py-2 rounded hover:bg-accentHover transition"
+          >
+            Search
+          </button>
+        </div>
+      </div>
+
       {/* Hero Section */}
-      <div className="bg-card p-8 rounded-lg text-center mb-8">
+      <div className="bg-card p-8 rounded-lg text-center mb-8 mt-4 animate-fadeIn">
         <h1 className="text-4xl font-bold text-accent mb-4">
           Welcome to ImpactStream
         </h1>
@@ -41,7 +75,7 @@ export default function Home() {
         {trending.map((item: any) => (
           <div
             key={item.id}
-            className="bg-card p-2 rounded cursor-pointer"
+            className="bg-card p-2 rounded cursor-pointer shadow-lg transition-transform duration-300 hover:scale-105"
             onClick={() => router.push(`/movie/${item.id}`)}
           >
             <img
