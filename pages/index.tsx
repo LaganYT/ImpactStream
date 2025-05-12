@@ -53,7 +53,6 @@ export default function Home() {
   const handleCardClick = (item: any) => {
     router.push({
       pathname: `/movie/${item.id}`,
-      query: { api: selectedApi.url },
     });
   };
 
