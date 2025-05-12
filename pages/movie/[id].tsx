@@ -52,55 +52,52 @@ export default function MovieDetails() {
 	if (!movie) return <div className="loading">Loading...</div>;
 
 	return (
-		<>
-			<Navbar query="" setQuery={() => {}} onSearch={() => {}} />
-			<div className="movie-details-container">
-				<div className="movie-card">
-					<div className="movie-header">
-						<img
-							src={`https://image.tmdb.org/t/p/w500${movie.poster_path}`}
-							alt={movie.title}
-							className="movie-poster"
-						/>
-						<div className="movie-info">
-							<h1 className="movie-title">{movie.title}</h1>
-							<p className="movie-description">{movie.overview}</p>
-							<div className="movie-metadata">
-								<span>Release: {movie.release_date}</span>
-								<span>Rating: {movie.vote_average}</span>
-								<span>Runtime: {movie.runtime} min</span>
-							</div>
-							<div className="api-selector">
-								<label htmlFor="api-select">Streaming API:</label>
-								<select
-									id="api-select"
-									value={selectedApi.url}
-									onChange={e =>
-										setSelectedApi(
-											STREAM_APIS.find(
-												api => api.url === e.target.value
-											)
+		<div className="movie-details-container">
+			<div className="movie-card">
+				<div className="movie-header">
+					<img
+						src={`https://image.tmdb.org/t/p/w500${movie.poster_path}`}
+						alt={movie.title}
+						className="movie-poster"
+					/>
+					<div className="movie-info">
+						<h1 className="movie-title">{movie.title}</h1>
+						<p className="movie-description">{movie.overview}</p>
+						<div className="movie-metadata">
+							<span>Release: {movie.release_date}</span>
+							<span>Rating: {movie.vote_average}</span>
+							<span>Runtime: {movie.runtime} min</span>
+						</div>
+						<div className="api-selector">
+							<label htmlFor="api-select">Streaming API:</label>
+							<select
+								id="api-select"
+								value={selectedApi.url}
+								onChange={e =>
+									setSelectedApi(
+										STREAM_APIS.find(
+											api => api.url === e.target.value
 										)
-									}
-								>
-									{STREAM_APIS.map(api => (
-										<option key={api.url} value={api.url}>
-											{api.name}
-										</option>
-									))}
-								</select>
-							</div>
+									)
+								}
+							>
+								{STREAM_APIS.map(api => (
+									<option key={api.url} value={api.url}>
+										{api.name}
+									</option>
+								))}
+							</select>
 						</div>
 					</div>
-					<div className="movie-player">
-						<iframe
-							src={`${selectedApi.url}${id}`}
-							allowFullScreen
-							className="movie-iframe"
-						></iframe>
-					</div>
+				</div>
+				<div className="movie-player">
+					<iframe
+						src={`${selectedApi.url}${id}`}
+						allowFullScreen
+						className="movie-iframe"
+					></iframe>
 				</div>
 			</div>
-		</>
+		</div>
 	);
 }
