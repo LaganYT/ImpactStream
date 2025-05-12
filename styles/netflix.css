@@ -1,0 +1,67 @@
+.navbar {
+  background-color: #141414;
+  padding: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.logo {
+  color: #e50914;
+  font-size: 24px;
+  font-weight: bold;
+}
+
+.search-bar input {
+  padding: 10px;
+  border: none;
+  border-radius: 4px;
+  margin-right: 10px;
+}
+
+.search-bar button {
+  background-color: #e50914;
+  color: #fff;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.hero {
+  text-align: center;
+  padding: 50px 20px;
+  background-color: #141414;
+  color: #fff;
+}
+
+.trending-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 20px;
+}
+
+.trending-item {
+  background-color: #222;
+  padding: 10px;
+  border-radius: 4px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.trending-item img {
+  width: 100%;
+  border-radius: 4px;
+}
+
+.trending-item h3 {
+  margin: 10px 0;
+  font-size: 16px;
+}
+
+.footer {
+  background-color: #141414;
+  color: #737373;
+  text-align: center;
+  padding: 20px;
+}

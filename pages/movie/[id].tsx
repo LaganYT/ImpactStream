@@ -49,31 +49,28 @@ export default function MovieDetails() {
     }
   }, [api]);
 
-  if (!movie) return <div className="text-center text-white">Loading...</div>;
+  if (!movie) return <div className="loading">Loading...</div>;
 
   return (
-    <div className="min-h-screen bg-background dark:bg-darkBackground text-white flex flex-col items-center py-8 px-2">
-      <div className="w-full max-w-4xl bg-card dark:bg-darkCard rounded-lg shadow-lg p-6 animate-fadeIn">
-        <div className="flex flex-col md:flex-row gap-6">
+    <div className="movie-details">
+      <div className="movie-card animate-fadeIn">
+        <div className="movie-header">
           <img
             src={`https://image.tmdb.org/t/p/w500${movie.poster_path}`}
             alt={movie.title}
-            className="rounded shadow-lg w-48 h-auto self-center"
+            className="movie-poster"
           />
-          <div className="flex-1">
-            <h1 className="text-4xl font-bold mb-2 text-accent">{movie.title}</h1>
-            <p className="text-textSecondary dark:text-darkTextSecondary mb-4">{movie.overview}</p>
-            <div className="flex flex-wrap gap-4 text-sm mb-4">
+          <div className="movie-info">
+            <h1 className="movie-title">{movie.title}</h1>
+            <p className="movie-overview">{movie.overview}</p>
+            <div className="movie-meta">
               <span>Release: {movie.release_date}</span>
               <span>Rating: {movie.vote_average}</span>
               <span>Runtime: {movie.runtime} min</span>
             </div>
-            <div className="mb-2">
-              <label className="mr-2 text-textSecondary dark:text-darkTextSecondary font-medium">
-                Streaming API:
-              </label>
+            <div className="api-selector">
+              <label>Streaming API:</label>
               <select
-                className="bg-input dark:bg-darkInput text-white rounded px-3 py-2"
                 value={selectedApi.url}
                 onChange={e => setSelectedApi(STREAM_APIS.find(api => api.url === e.target.value))}
               >
@@ -84,13 +81,10 @@ export default function MovieDetails() {
             </div>
           </div>
         </div>
-        <div className="mt-8">
+        <div className="movie-player">
           <iframe
             src={`${selectedApi.url}${id}`}
-            width="100%"
-            height="500"
             allowFullScreen
-            className="rounded shadow-lg w-full"
           ></iframe>
         </div>
       </div>

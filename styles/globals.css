@@ -1,16 +1,32 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
 body {
-  @apply bg-background text-textPrimary dark:bg-darkBackground dark:text-darkTextPrimary;
+  background-color: #141414;
+  color: #e5e5e5;
   margin: 0;
-  font-family: 'Inter', sans-serif;
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
   min-height: 100vh;
   padding-bottom: 60px; /* for footer spacing */
 }
 
 a {
-  @apply text-accent hover:underline dark:text-darkAccent;
+  color: #e50914;
+  text-decoration: none;
   transition: color 0.2s;
+}
+
+a:hover {
+  color: #f40612;
+}
+
+button {
+  background-color: #e50914;
+  color: #fff;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+button:hover {
+  background-color: #f40612;
 }
