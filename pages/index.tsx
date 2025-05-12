@@ -2,20 +2,9 @@ import axios from "axios";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 
-const STREAM_APIS = [
-  { name: "VidSrc.me", url: "https://vidsrc.me/embed/" },
-  { name: "VidSrc.cc", url: "https://vidsrc.cc/embed/" },
-  { name: "Embed.su", url: "https://embed.su/embed/" },
-  { name: "VidLink.pro", url: "https://vidlink.pro/embed/" },
-  { name: "VidSrc.icu", url: "https://vidsrc.icu/embed/" },
-  { name: "AutoEmbed.cc", url: "https://autoembed.cc/movie/" },
-  { name: "VidSrc.to", url: "https://vidsrc.to/embed/" },
-];
-
 export default function Home() {
   const [trending, setTrending] = useState([]);
   const [query, setQuery] = useState("");
-  const [selectedApi, setSelectedApi] = useState(STREAM_APIS[0]);
   const router = useRouter();
 
   useEffect(() => {
@@ -57,10 +46,12 @@ export default function Home() {
   return (
     <div className="home">
       <main className="container">
-        <Navbar query={query} setQuery={setQuery} onSearch={searchContent} />
         <header className="hero">
           <h1>Welcome to ImpactStream</h1>
-            <p>Discover and stream your favorite movies, TV shows, and anime all in one place.</p>
+          <p>
+            Discover and stream your favorite movies, TV shows, and anime all in
+            one place.
+          </p>
         </header>
         {/* Trending/Search Results Section */}
         <section className="trending">
@@ -73,15 +64,23 @@ export default function Home() {
                 onClick={() => handleCardClick(item)}
               >
                 <img
-                  src={item.poster_path
-                    ? `https://image.tmdb.org/t/p/w500${item.poster_path}`
-                    : "/no-image.svg"}
+                  src={
+                    item.poster_path
+                      ? `https://image.tmdb.org/t/p/w500${item.poster_path}`
+                      : "/no-image.svg"
+                  }
                   alt={item.title || item.name}
                 />
                 <h3>{item.title || item.name}</h3>
-                <span>{item.release_date?.slice(0, 4) || item.first_air_date?.slice(0, 4) || ""}</span>
+                <span>
+                  {
+                    item.release_date?.slice(0, 4) ||
+                    item.first_air_date?.slice(0, 4) ||
+                    ""
+                  }
+                </span>
                 <button
-                  onClick={e => {
+                  onClick={(e) => {
                     e.stopPropagation();
                     handleCardClick(item);
                   }}
@@ -93,7 +92,6 @@ export default function Home() {
           </div>
         </section>
       </main>
-      <Footer />
     </div>
   );
 }
