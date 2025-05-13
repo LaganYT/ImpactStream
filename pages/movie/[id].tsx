@@ -53,6 +53,13 @@ export default function MovieDetails() {
 
 	return (
 		<div className="movie-details-container">
+      <div className="movie-player">
+					<iframe
+						src={`${selectedApi.url}${id}`}
+						allowFullScreen
+						className="movie-iframe"
+					></iframe>
+				</div>
 			<div className="movie-card">
 				<div className="movie-header">
 					<img
@@ -89,13 +96,6 @@ export default function MovieDetails() {
 							</select>
 						</div>
 					</div>
-				</div>
-				<div className="movie-player">
-					<iframe
-						src={`${selectedApi.url}${id}`}
-						allowFullScreen
-						className="movie-iframe"
-					></iframe>
 				</div>
 			</div>
 		</div>
