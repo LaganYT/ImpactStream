@@ -90,7 +90,7 @@ export default function Home() {
             one place.
           </p>
           <p style={{ color: "#f5f5f5", fontSize: "0.9rem", marginTop: "1rem" }}>
-            <strong>Note:</strong> We recommend using an ad blocker for a better experience. You can use 
+            <strong>Note:</strong> We recommend using an ad blocker for a better experience. You can use {" "}
             <a 
               href="https://chromewebstore.google.com/detail/adblock-%E2%80%94-block-ads-acros/gighmmpiobklfepjocnamgkkbiglidom?hl=en-US" 
               target="_blank" 
@@ -98,8 +98,7 @@ export default function Home() {
               style={{ color: "#e50914", textDecoration: "underline" }}
             >
               AdBlock
-            </a> 
-            or try the 
+            </a> {" "}or try the{" "}
             <a 
               href="https://brave.com/" 
               target="_blank" 
