@@ -116,14 +116,6 @@ export default function Home() {
                       ""
                     }
                   </span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleCardClick(item);
-                    }}
-                  >
-                    Watch
-                  </button>
                 </div>
               ))}
             </div>
