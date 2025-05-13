@@ -33,7 +33,10 @@ export default function Home() {
       setTrending(data.results);
     };
 
-    const searchQuery = router.query.query;
+    const searchQuery = Array.isArray(router.query.query)
+      ? router.query.query[0]
+      : router.query.query;
+
     if (searchQuery) {
       setQuery(searchQuery);
       fetchSearchResults(searchQuery);
