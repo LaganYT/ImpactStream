@@ -9,28 +9,35 @@ export default function Home() {
 
   useEffect(() => {
     const fetchTrending = async () => {
-      const { data } = await axios.get(
-        `https://api.themoviedb.org/3/discover/movie?include_adult=false&include_video=false&language=en-US&page=1&sort_by=popularity.desc`,
+      const { data: movies } = await axios.get(
+        `https://api.themoviedb.org/3/trending/movie/day`,
         {
-          params: {
-            api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY,
-          },
+          params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY },
         }
       );
-      setTrending(data.results);
+      const { data: tvShows } = await axios.get(
+        `https://api.themoviedb.org/3/trending/tv/day`,
+        {
+          params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY },
+        }
+      );
+      setTrending([...movies.results, ...tvShows.results]);
     };
 
     const fetchSearchResults = async (searchQuery) => {
-      const { data } = await axios.get(
-        `https://api.themoviedb.org/3/search/movie`, // Changed endpoint to search for movies only
+      const { data: movies } = await axios.get(
+        `https://api.themoviedb.org/3/search/movie`,
         {
-          params: {
-            api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY,
-            query: searchQuery,
-          },
+          params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY, query: searchQuery },
         }
       );
-      setTrending(data.results);
+      const { data: tvShows } = await axios.get(
+        `https://api.themoviedb.org/3/search/tv`,
+        {
+          params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY, query: searchQuery },
+        }
+      );
+      setTrending([...movies.results, ...tvShows.results]);
     };
 
     const searchQuery = Array.isArray(router.query.query)
@@ -46,9 +53,8 @@ export default function Home() {
   }, [router.query]);
 
   const handleCardClick = (item: any) => {
-    router.push({
-      pathname: `/movie/${item.id}`,
-    });
+    const type = item.media_type === "tv" ? "tv" : "movie";
+    router.push({ pathname: `/${type}/${item.id}` });
   };
 
   return (

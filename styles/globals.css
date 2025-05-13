@@ -7,9 +7,9 @@
 
 body {
   font-family: 'Inter', sans-serif;
-  background-color: #141414;
-  color: #e5e5e5;
-  line-height: 1.6;
+  background-color: #121212;
+  color: #f5f5f5;
+  line-height: 1.8;
   overflow-x: hidden;
 }
 
@@ -22,14 +22,16 @@ button {
   background-color: #e50914;
   color: #fff;
   border: none;
-  padding: 0.5rem 1rem;
-  border-radius: 4px;
+  padding: 0.6rem 1.2rem;
+  border-radius: 6px;
   cursor: pointer;
-  transition: background-color 0.3s ease;
+  font-weight: bold;
+  transition: background-color 0.3s ease, transform 0.2s ease;
 }
 
 button:hover {
   background-color: #f40612;
+  transform: scale(1.05);
 }
 
 /* Navbar */
@@ -118,15 +120,16 @@ button:hover {
 }
 
 .trending-item {
-  background-color: #222;
-  border-radius: 8px;
+  background-color: #1e1e1e;
+  border-radius: 10px;
   overflow: hidden;
   text-align: center;
-  transition: transform 0.3s ease;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
 .trending-item:hover {
-  transform: scale(1.05);
+  transform: scale(1.1);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
 }
 
 .trending-item img {
@@ -146,12 +149,12 @@ button:hover {
 
 /* Movie Details */
 .movie-details-container {
-  max-width: 800px;
+  max-width: 900px;
   margin: 2rem auto;
-  padding: 1rem;
-  background-color: #1c1c1c;
-  border-radius: 8px;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  padding: 2rem;
+  background-color: #1a1a1a;
+  border-radius: 12px;
+  box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4);
 }
 
 .movie-card {

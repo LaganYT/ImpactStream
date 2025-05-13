@@ -27,19 +27,18 @@ export default function MovieDetails() {
   useEffect(() => {
     if (!id) return;
 
-    const fetchMovie = async () => {
+    const fetchDetails = async () => {
+      const endpoint = movieType === "tv" ? "tv" : "movie";
       const { data } = await axios.get(
-        `https://api.themoviedb.org/3/movie/${id}`,
+        `https://api.themoviedb.org/3/${endpoint}/${id}`,
         {
-          params: {
-            api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY,
-          },
+          params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY },
         }
       );
       setMovie(data);
     };
 
-    fetchMovie();
+    fetchDetails();
   }, [id]);
 
   useEffect(() => {
@@ -50,6 +49,9 @@ export default function MovieDetails() {
   }, [api]);
 
   if (!movie) return <div className="loading">Loading...</div>;
+
+  const runtime = movie.runtime || movie.episode_run_time?.[0];
+  const releaseDate = movie.release_date || movie.first_air_date;
 
   return (
     <div className="movie-details-container">
@@ -89,9 +91,9 @@ export default function MovieDetails() {
             <h1 className="movie-title">{movie.title}</h1>
             <p className="movie-description">{movie.overview}</p>
             <div className="movie-metadata">
-              <span>Release: {movie.release_date}</span>
+              <span>Release: {releaseDate}</span>
               <span>Rating: {movie.vote_average}</span>
-              <span>Runtime: {movie.runtime} min</span>
+              <span>Runtime: {runtime} min</span>
             </div>
           </div>
         </div>
