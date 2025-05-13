@@ -51,7 +51,7 @@ export default function Home() {
         onTheAir: `https://api.themoviedb.org/3/tv/on_the_air`,
       };
 
-      const categoryData: Record<string, any[]> = {}; // Explicitly typed
+      const categoryData: Record<string, any[]> = { trending }; // Include trending
       for (const [key, url] of Object.entries(endpoints)) {
         const { data } = await axios.get(url, {
           params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY },
@@ -89,49 +89,15 @@ export default function Home() {
             one place.
           </p>
         </header>
-        {/* Trending/Search Results Section */}
-        <section className="trending">
-          <h2>{query ? `Search Results for "${query}"` : "Trending Now"}</h2>
-          <div className="trending-grid">
-            {trending.map((item: any) => (
-              <div
-                key={item.id}
-                className="trending-item"
-                onClick={() => handleCardClick(item)}
-              >
-                <img
-                  src={
-                    item.poster_path
-                      ? `https://image.tmdb.org/t/p/w500${item.poster_path}`
-                      : "/no-image.svg"
-                  }
-                  alt={item.title || item.name}
-                />
-                <h3>{item.title || item.name}</h3>
-                <span>
-                  {
-                    item.release_date?.slice(0, 4) ||
-                    item.first_air_date?.slice(0, 4) ||
-                    ""
-                  }
-                </span>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleCardClick(item);
-                  }}
-                >
-                  Watch
-                </button>
-              </div>
-            ))}
-          </div>
-        </section>
         <section className="categories">
-          <h2>Explore More</h2>
+          <h2>{query ? `Search Results for "${query}"` : "Explore More"}</h2>
           {Object.entries(categories).map(([key, items]) => (
             <div key={key} className="category">
-              <h3>{key.replace(/([A-Z])/g, " $1").replace(/^./, (str) => str.toUpperCase())}</h3>
+              <h3>
+                {key === "trending"
+                  ? "Trending Now"
+                  : key.replace(/([A-Z])/g, " $1").replace(/^./, (str) => str.toUpperCase())}
+              </h3>
               <div className="category-scroll">
                 {items.map((item: any) => (
                   <div
