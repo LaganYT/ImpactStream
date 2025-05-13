@@ -20,22 +20,27 @@ export default function Home() {
       setTrending(data.results);
     };
 
-    fetchTrending();
-  }, []);
+    const fetchSearchResults = async (searchQuery) => {
+      const { data } = await axios.get(
+        `https://api.themoviedb.org/3/search/multi`,
+        {
+          params: {
+            api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY,
+            query: searchQuery,
+          },
+        }
+      );
+      setTrending(data.results);
+    };
 
-  const searchContent = async () => {
-    if (!query.trim()) return;
-    const { data } = await axios.get(
-      `https://api.themoviedb.org/3/search/multi`,
-      {
-        params: {
-          api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY,
-          query,
-        },
-      }
-    );
-    setTrending(data.results);
-  };
+    const searchQuery = router.query.query;
+    if (searchQuery) {
+      setQuery(searchQuery);
+      fetchSearchResults(searchQuery);
+    } else {
+      fetchTrending();
+    }
+  }, [router.query]);
 
   const handleCardClick = (item: any) => {
     router.push({
@@ -55,7 +60,7 @@ export default function Home() {
         </header>
         {/* Trending/Search Results Section */}
         <section className="trending">
-          <h2>Trending Now</h2>
+          <h2>{query ? `Search Results for "${query}"` : "Trending Now"}</h2>
           <div className="trending-grid">
             {trending.map((item: any) => (
               <div

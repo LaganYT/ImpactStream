@@ -1,6 +1,16 @@
 import React from "react";
+import { useRouter } from "next/router";
 
 export default function Navbar({ query, setQuery, onSearch }) {
+  const router = useRouter();
+
+  const handleSearch = () => {
+    if (query.trim()) {
+      router.push(`/?query=${encodeURIComponent(query)}`);
+      onSearch();
+    }
+  };
+
   return (
     <nav className="navbar">
       <h1 className="logo">ImpactStream</h1>
@@ -10,9 +20,11 @@ export default function Navbar({ query, setQuery, onSearch }) {
           placeholder="Search movies, shows, or anime..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={e => { if (e.key === "Enter") onSearch(); }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleSearch();
+          }}
         />
-        <button onClick={onSearch}>Search</button>
+        <button onClick={handleSearch}>Search</button>
       </div>
     </nav>
   );
