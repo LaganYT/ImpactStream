@@ -4,6 +4,7 @@ import { useRouter } from "next/router";
 
 export default function Home() {
   const [trending, setTrending] = useState([]);
+  const [categories, setCategories] = useState({});
   const [query, setQuery] = useState("");
   const router = useRouter();
 
@@ -40,6 +41,26 @@ export default function Home() {
       setTrending([...movies.results, ...tvShows.results]);
     };
 
+    const fetchCategories = async () => {
+      const endpoints = {
+        nowPlaying: `https://api.themoviedb.org/3/movie/now_playing`,
+        popularMovies: `https://api.themoviedb.org/3/movie/popular`,
+        topRatedMovies: `https://api.themoviedb.org/3/movie/top_rated`,
+        upcomingMovies: `https://api.themoviedb.org/3/movie/upcoming`,
+        airingToday: `https://api.themoviedb.org/3/tv/airing_today`,
+        onTheAir: `https://api.themoviedb.org/3/tv/on_the_air`,
+      };
+
+      const categoryData = {};
+      for (const [key, url] of Object.entries(endpoints)) {
+        const { data } = await axios.get(url, {
+          params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY },
+        });
+        categoryData[key] = data.results;
+      }
+      setCategories(categoryData);
+    };
+
     const searchQuery = Array.isArray(router.query.query)
       ? router.query.query[0]
       : router.query.query;
@@ -49,6 +70,7 @@ export default function Home() {
       fetchSearchResults(searchQuery);
     } else {
       fetchTrending();
+      fetchCategories();
     }
   }, [router.query]);
 
@@ -104,6 +126,33 @@ export default function Home() {
               </div>
             ))}
           </div>
+        </section>
+        <section className="categories">
+          <h2>Explore More</h2>
+          {Object.entries(categories).map(([key, items]) => (
+            <div key={key} className="category">
+              <h3>{key.replace(/([A-Z])/g, " $1").replace(/^./, (str) => str.toUpperCase())}</h3>
+              <div className="category-grid">
+                {items.map((item: any) => (
+                  <div
+                    key={item.id}
+                    className="category-item"
+                    onClick={() => handleCardClick(item)}
+                  >
+                    <img
+                      src={
+                        item.poster_path
+                          ? `https://image.tmdb.org/t/p/w500${item.poster_path}`
+                          : "/no-image.svg"
+                      }
+                      alt={item.title || item.name}
+                    />
+                    <h4>{item.title || item.name}</h4>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </section>
       </main>
     </div>
