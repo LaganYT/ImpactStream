@@ -227,6 +227,10 @@ button:hover {
 }
 
 /* Categories */
+.categories {
+  margin: 0 2rem; /* Added left and right margins */
+}
+
 .category {
   margin-bottom: 2rem;
 }
