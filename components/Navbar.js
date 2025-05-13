@@ -13,7 +13,7 @@ export default function Navbar({ query, setQuery, onSearch }) {
 
   return (
     <nav className="navbar">
-      <h1 className="logo">ImpactStream</h1>
+      <Link href="/"><h1 className="logo">ImpactStream</h1></Link>
       <div className="search-bar">
         <input
           type="text"
