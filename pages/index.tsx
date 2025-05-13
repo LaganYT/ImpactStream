@@ -93,7 +93,7 @@ export default function Home() {
         {query ? (
           <section className="search-results">
             <h2>Search Results for "{query}"</h2>
-            <div className="search-grid">
+            <div className="search-scroll">
               {trending.map((item: any) => (
                 <div
                   key={item.id}

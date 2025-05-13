@@ -295,13 +295,32 @@ button:hover {
   margin-bottom: 1rem;
 }
 
-.search-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+.search-scroll {
+  display: flex;
+  overflow-x: auto;
   gap: 1rem;
+  padding-bottom: 1rem;
+  scrollbar-width: thin;
+  scrollbar-color: #e50914 #333;
+}
+
+.search-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.search-scroll::-webkit-scrollbar-thumb {
+  background-color: #e50914;
+  border-radius: 4px;
+}
+
+.search-scroll::-webkit-scrollbar-track {
+  background-color: #333;
+  margin: 0 1rem;
 }
 
 .search-item {
+  flex: 0 0 auto;
+  width: 150px;
   background-color: #1e1e1e;
   border-radius: 10px;
   overflow: hidden;
