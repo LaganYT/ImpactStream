@@ -78,8 +78,9 @@ export default function MovieDetails() {
     <div className="movie-details-container">
       <div className="movie-player">
         <iframe
-          src={`${selectedApi.url}${id}`}
-          allow="fullscreen; encrypted-media; picture-in-picture"
+          src={`/player?url=${encodeURIComponent(`${selectedApi.url}${id}`)}`}
+          allowFullScreen
+          sandbox="allow-same-origin allow-scripts allow-presentation"
           className="movie-iframe"
         ></iframe>
       </div>
