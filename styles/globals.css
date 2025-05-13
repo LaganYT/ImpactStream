@@ -58,7 +58,7 @@ button:hover {
 .search-bar input {
   padding: 0.5rem;
   flex: 1;
-  width: 100%;
+  width: 300px; /* Increased width */
   border: 1px solid #333;
   border-radius: 4px;
   background-color: #222;
