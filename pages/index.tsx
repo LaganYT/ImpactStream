@@ -53,7 +53,7 @@ export default function Home() {
   }, [router.query]);
 
   const handleCardClick = (item: any) => {
-    const type = item.media_type === "tv" ? "tv" : "movie";
+    const type = item.media_type === "tv" || item.first_air_date ? "tv" : "movie";
     router.push({ pathname: `/${type}/${item.id}` });
   };
 
