@@ -51,9 +51,9 @@ A way to stream your favorite movies, TV shows, and anime using multiple streami
 
 ## Usage
 
-1. Use the search bar on the homepage to find movies, TV shows, or anime.
-2. Click on a result to view details and stream the content.
-3. Enjoy seamless streaming with embedded players.
+1. Use the search bar on the homepage to search for movies, TV shows, or anime.
+2. Select a result to view detailed information and available streaming options.
+3. Click on a streaming link to start watching content directly in the embedded player.
 
 ## Technologies Used
 
