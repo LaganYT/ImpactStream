@@ -89,7 +89,7 @@ export default function Home() {
             Discover and stream your favorite movies, TV shows, and anime all in
             one place.
           </p>
-          <p id="dfp-ad--banner" className="adTeaser" style={{ color: "#f5f5f5", fontSize: "0.9rem", marginTop: "1rem" }}>
+          <p id="adbanner" className="adTeaser" style={{ color: "#f5f5f5", fontSize: "0.9rem", marginTop: "1rem" }}>
             <strong>Note:</strong> We recommend using an ad blocker for a better experience. You can use {" "}
             <a 
               href="https://chromewebstore.google.com/detail/adblock-%E2%80%94-block-ads-acros/gighmmpiobklfepjocnamgkkbiglidom?hl=en-US" 
