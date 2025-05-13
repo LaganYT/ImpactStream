@@ -17,7 +17,7 @@
     "next": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "react-icons/fa": "latest"
+    "react-icons": "latest"
   },
   "devDependencies": {
     "eslint": "latest",
