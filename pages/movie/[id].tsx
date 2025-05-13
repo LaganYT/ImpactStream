@@ -28,7 +28,7 @@ export default function MovieDetails() {
     if (!id) return;
 
     const fetchDetails = async () => {
-      const endpoint = movieType === "tv" ? "tv" : "movie";
+      const endpoint = "movie"; // Fixed to always use "movie"
       const { data } = await axios.get(
         `https://api.themoviedb.org/3/${endpoint}/${id}`,
         {
