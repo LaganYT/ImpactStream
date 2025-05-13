@@ -4,7 +4,7 @@ import { useRouter } from "next/router";
 
 export default function Home() {
   const [trending, setTrending] = useState([]);
-  const [categories, setCategories] = useState({});
+  const [categories, setCategories] = useState<Record<string, any[]>>({}); // Explicitly typed
   const [query, setQuery] = useState("");
   const router = useRouter();
 
@@ -51,7 +51,7 @@ export default function Home() {
         onTheAir: `https://api.themoviedb.org/3/tv/on_the_air`,
       };
 
-      const categoryData = {};
+      const categoryData: Record<string, any[]> = {}; // Explicitly typed
       for (const [key, url] of Object.entries(endpoints)) {
         const { data } = await axios.get(url, {
           params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY },
