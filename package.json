@@ -17,8 +17,7 @@
     "next": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "react-icons": "latest",
-    "yt-search": "latest"
+    "react-icons": "latest"
   },
   "devDependencies": {
     "eslint": "latest",
