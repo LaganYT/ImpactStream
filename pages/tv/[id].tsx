@@ -10,7 +10,6 @@ const STREAM_APIS = [
   { name: "VidSrc.xyz", url: "https://vidsrc.xyz/embed/tv/" },
   { name: "VidSrc.cc", url: "https://vidsrc.cc/v3/embed/tv/" },
   { name: "Embed.su", url: "https://embed.su/embed/tv/" },
-  { name: "VidLink.pro", url: "https://vidlink.pro/tv/" },
   { name: "VidSrc.icu", url: "https://vidsrc.icu/embed/tv/" },
   { name: "AutoEmbed.cc", url: "https://player.autoembed.cc/embed/tv/" },
   { name: "VidSrc.to", url: "https://vidsrc.to/embed/tv/" },
