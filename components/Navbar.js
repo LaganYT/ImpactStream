@@ -1,6 +1,7 @@
 import React from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
+import { FaGithub } from "react-icons/fa";
 
 export default function Navbar({ query, setQuery, onSearch }) {
   const router = useRouter();
@@ -27,6 +28,14 @@ export default function Navbar({ query, setQuery, onSearch }) {
         />
         <button onClick={handleSearch}>Search</button>
       </div>
+      <a
+        href="https://github.com/LaganYT/ImpactStream"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="github-icon"
+      >
+        <FaGithub size={24} />
+      </a>
     </nav>
   );
 }

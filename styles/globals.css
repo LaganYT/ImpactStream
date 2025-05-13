@@ -63,6 +63,16 @@ button:hover {
   color: #fff;
 }
 
+.github-icon {
+  color: #f5f5f5;
+  margin-left: 1rem;
+  transition: color 0.3s ease;
+}
+
+.github-icon:hover {
+  color: #e50914;
+}
+
 /* Hero Section */
 .hero {
   text-align: center;
