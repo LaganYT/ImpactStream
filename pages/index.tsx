@@ -132,7 +132,7 @@ export default function Home() {
           {Object.entries(categories).map(([key, items]) => (
             <div key={key} className="category">
               <h3>{key.replace(/([A-Z])/g, " $1").replace(/^./, (str) => str.toUpperCase())}</h3>
-              <div className="category-grid">
+              <div className="category-scroll">
                 {items.map((item: any) => (
                   <div
                     key={item.id}
