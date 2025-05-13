@@ -46,12 +46,29 @@ export default function TVDetails() {
     }
   }, [api]);
 
+  useEffect(() => {
+    const iframe = document.getElementById("framez") as HTMLIFrameElement;
+    if (iframe) {
+      const currentSrc = iframe.src;
+      if (
+        iframe.sandbox &&
+        iframe.sandbox.contains("allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation")
+      ) {
+        iframe.removeAttribute("sandbox");
+      }
+      iframe.src = currentSrc; // Reload iframe
+      iframe.sandbox = "allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation";
+    }
+  }, [selectedApi, id]);
+
   if (!tvShow) return <div className="loading">Loading...</div>;
 
   return (
     <div className="movie-details-container">
       <div className="movie-player">
         <iframe
+          name="framez"
+          id="framez"
           src={`${selectedApi.url}${id}`}
           allowFullScreen
           className="movie-iframe"
