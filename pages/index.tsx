@@ -93,11 +93,11 @@ export default function Home() {
         {query ? (
           <section className="search-results">
             <h2>Search Results for "{query}"</h2>
-            <div className="trending-grid">
+            <div className="search-grid">
               {trending.map((item: any) => (
                 <div
                   key={item.id}
-                  className="trending-item"
+                  className="search-item"
                   onClick={() => handleCardClick(item)}
                 >
                   <img
