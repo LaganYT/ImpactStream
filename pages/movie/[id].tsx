@@ -48,6 +48,27 @@ export default function MovieDetails() {
     }
   }, [api]);
 
+  useEffect(() => {
+    const iframe = document.querySelector(".movie-iframe") as HTMLIFrameElement;
+    if (iframe) {
+      iframe.onload = () => {
+        const script = `
+          document.addEventListener('click', (e) => {
+            const target = e.target as HTMLElement;
+            if (target.tagName === 'A') {
+              e.preventDefault();
+            }
+          });
+        `;
+        const scriptTag = iframe.contentDocument?.createElement("script");
+        if (scriptTag) {
+          scriptTag.textContent = script;
+          iframe.contentDocument.head.appendChild(scriptTag);
+        }
+      };
+    }
+  }, [selectedApi, id]);
+
   if (!movie) return <div className="loading">Loading...</div>;
 
   const runtime = movie.runtime || movie.episode_run_time?.[0];
