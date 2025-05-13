@@ -22,7 +22,7 @@ export default function Home() {
 
     const fetchSearchResults = async (searchQuery) => {
       const { data } = await axios.get(
-        `https://api.themoviedb.org/3/search/multi`,
+        `https://api.themoviedb.org/3/search/movie`, // Changed endpoint to search for movies only
         {
           params: {
             api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY,
