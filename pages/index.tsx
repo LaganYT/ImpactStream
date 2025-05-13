@@ -43,6 +43,7 @@ export default function Home() {
 
     const fetchCategories = async () => {
       const endpoints = {
+        trending: `https://api.themoviedb.org/3/trending/all/day`, // Explicitly added trending
         nowPlaying: `https://api.themoviedb.org/3/movie/now_playing`,
         popularMovies: `https://api.themoviedb.org/3/movie/popular`,
         topRatedMovies: `https://api.themoviedb.org/3/movie/top_rated`,
@@ -51,7 +52,7 @@ export default function Home() {
         onTheAir: `https://api.themoviedb.org/3/tv/on_the_air`,
       };
 
-      const categoryData: Record<string, any[]> = { trending }; // Include trending
+      const categoryData: Record<string, any[]> = {};
       for (const [key, url] of Object.entries(endpoints)) {
         const { data } = await axios.get(url, {
           params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY },
