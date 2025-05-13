@@ -90,37 +90,76 @@ export default function Home() {
             one place.
           </p>
         </header>
-        <section className="categories">
-          <h2>{query ? `Search Results for "${query}"` : "Explore More"}</h2>
-          {Object.entries(categories).map(([key, items]) => (
-            <div key={key} className="category">
-              <h3>
-                {key === "trending"
-                  ? "Trending Now"
-                  : key.replace(/([A-Z])/g, " $1").replace(/^./, (str) => str.toUpperCase())}
-              </h3>
-              <div className="category-scroll">
-                {items.map((item: any) => (
-                  <div
-                    key={item.id}
-                    className="category-item"
-                    onClick={() => handleCardClick(item)}
+        {query ? (
+          <section className="search-results">
+            <h2>Search Results for "{query}"</h2>
+            <div className="trending-grid">
+              {trending.map((item: any) => (
+                <div
+                  key={item.id}
+                  className="trending-item"
+                  onClick={() => handleCardClick(item)}
+                >
+                  <img
+                    src={
+                      item.poster_path
+                        ? `https://image.tmdb.org/t/p/w500${item.poster_path}`
+                        : "/no-image.svg"
+                    }
+                    alt={item.title || item.name}
+                  />
+                  <h3>{item.title || item.name}</h3>
+                  <span>
+                    {
+                      item.release_date?.slice(0, 4) ||
+                      item.first_air_date?.slice(0, 4) ||
+                      ""
+                    }
+                  </span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCardClick(item);
+                    }}
                   >
-                    <img
-                      src={
-                        item.poster_path
-                          ? `https://image.tmdb.org/t/p/w500${item.poster_path}`
-                          : "/no-image.svg"
-                      }
-                      alt={item.title || item.name}
-                    />
-                    <h4>{item.title || item.name}</h4>
-                  </div>
-                ))}
-              </div>
+                    Watch
+                  </button>
+                </div>
+              ))}
             </div>
-          ))}
-        </section>
+          </section>
+        ) : (
+          <section className="categories">
+            {Object.entries(categories).map(([key, items]) => (
+              <div key={key} className="category">
+                <h3>
+                  {key === "trending"
+                    ? "Trending Now"
+                    : key.replace(/([A-Z])/g, " $1").replace(/^./, (str) => str.toUpperCase())}
+                </h3>
+                <div className="category-scroll">
+                  {items.map((item: any) => (
+                    <div
+                      key={item.id}
+                      className="category-item"
+                      onClick={() => handleCardClick(item)}
+                    >
+                      <img
+                        src={
+                          item.poster_path
+                            ? `https://image.tmdb.org/t/p/w500${item.poster_path}`
+                            : "/no-image.svg"
+                        }
+                        alt={item.title || item.name}
+                      />
+                      <h4>{item.title || item.name}</h4>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </section>
+        )}
       </main>
     </div>
   );
