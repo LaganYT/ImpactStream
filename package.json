@@ -2,7 +2,6 @@
   "name": "impactstream-backend",
   "version": "1.0.0",
   "description": "Backend API for ImpactStream, providing movie, TV, and anime streaming data via TMDB and streaming APIs.",
-  "main": "src/index.ts",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
