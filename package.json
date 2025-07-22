@@ -15,7 +15,8 @@
     "express": "latest",
     "axios": "latest",
     "dotenv": "latest",
-    "cors": "latest"
+    "cors": "latest",
+    "next": "latest"
   },
   "devDependencies": {
     "typescript": "latest",
