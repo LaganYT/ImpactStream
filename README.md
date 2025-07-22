@@ -1,71 +1,80 @@
-# ImpactStream
+# ImpactStream Backend API
 
-A way to stream your favorite movies, TV shows, and anime using multiple streaming APIs.
+A backend API for streaming your favorite movies, TV shows, and anime using The Movie Database (TMDB) and multiple streaming providers.
 
 ## Features
-
-- Search for movies, TV shows, and anime using The Movie Database (TMDB) API.
-- Stream content using embed links from:
-  - [VidSrc](https://vidsrc.me)
-  - [VidLink](https://vidlink.pro)
-  - [AutoEmbed](https://autoembed.cc)
-  - [Embed.su](https://embed.su)
-  - [VidSrc.cc](https://vidsrc.cc)
-  - [VidSrc.icu](https://vidsrc.icu)
-  - [VidSrc.to](https://vidsrc.to)
-- Responsive and user-friendly interface.
-- Customizable player options.
+- Search for movies, TV shows, and anime using the TMDB API
+- Get detailed info for movies and TV shows
+- Get streaming embed links from multiple providers
 
 ## Getting Started
 
 ### Prerequisites
-
 - Node.js (v16 or higher)
 - npm or yarn
-- API key from [The Movie Database (TMDB)](https://developer.themoviedb.org/docs/getting-started)
+- TMDB API key ([Get one here](https://developer.themoviedb.org/docs/getting-started))
 
 ### Installation
-
 1. Clone the repository:
    ```bash
    git clone https://github.com/LaganYT/ImpactStream.git
    cd ImpactStream
    ```
-
 2. Install dependencies:
    ```bash
    npm install
    ```
-
-3. Create a `.env.local` file in the root directory and add your TMDB API key:
-   ```plaintext
-   NEXT_PUBLIC_TMDB_API_KEY=your_tmdb_api_key
+3. Create a `.env` file in the root directory and add your TMDB API key:
+   ```env
+   TMDB_API_KEY=your_tmdb_api_key
    ```
-
 4. Start the development server:
    ```bash
    npm run dev
    ```
 
-5. Open your browser and navigate to `http://localhost:3000`.
+## API Endpoints
 
-## Usage
+### Search
+- `GET /api/search?query=...`
+  - Search for movies, TV shows, or anime by query string.
 
-1. Use the search bar on the homepage to search for movies, TV shows, or anime.
-2. Select a result to view detailed information and available streaming options.
-3. Click on a streaming link to start watching content directly in the embedded player.
+### Movie Details
+- `GET /api/movie/:id`
+  - Get details for a movie by TMDB ID.
+
+### TV Show Details
+- `GET /api/tv/:id`
+  - Get details for a TV show by TMDB ID.
+
+### Streaming Links
+- `GET /api/stream/:type/:id`
+  - Get streaming embed links for a movie or TV show from multiple providers.
+  - `type` is either `movie` or `tv`.
+
+## Example Usage
+
+- Search:
+  ```bash
+  curl 'http://localhost:3000/api/search?query=Inception'
+  ```
+- Movie details:
+  ```bash
+  curl 'http://localhost:3000/api/movie/27205'
+  ```
+- TV details:
+  ```bash
+  curl 'http://localhost:3000/api/tv/1399'
+  ```
+- Streaming links:
+  ```bash
+  curl 'http://localhost:3000/api/stream/movie/27205'
+  ```
 
 ## Technologies Used
-
-- [Next.js](https://nextjs.org/) - React framework for server-side rendering.
-- [Axios](https://axios-http.com/) - HTTP client for API requests.
-- [TMDB API](https://developer.themoviedb.org/) - For fetching movie, TV show, and anime data.
+- [Express](https://expressjs.com/) - Web framework for Node.js
+- [Axios](https://axios-http.com/) - HTTP client for API requests
+- [TMDB API](https://developer.themoviedb.org/) - Movie and TV data
 
 ## License
-
-This project is licensed under the MIT License. See the LICENSE file for details.
-
-## Acknowledgments
-
-- [TMDB](https://www.themoviedb.org/) for providing movie and TV show data.
-- Various streaming APIs for embedding content.
+MIT

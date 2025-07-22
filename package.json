@@ -1,29 +1,27 @@
 {
-  "name": "impactstream",
+  "name": "impactstream-backend",
   "version": "1.0.0",
-  "description": "A way to stream your favorite movies, TV shows, and anime using multiple streaming APIs.",
-  "main": "index.js",
+  "description": "Backend API for ImpactStream, providing movie, TV, and anime streaming data via TMDB and streaming APIs.",
+  "main": "dist/index.js",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+    "dev": "ts-node-dev src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
   },
-  "keywords": ["streaming", "movies", "tv-shows", "anime", "nextjs"],
+  "keywords": ["streaming", "movies", "tv-shows", "anime", "api", "express"],
   "author": "LaganYT",
   "license": "MIT",
   "dependencies": {
+    "express": "latest",
     "axios": "latest",
-    "next": "latest",
-    "react": "latest",
-    "react-dom": "latest",
-    "react-icons": "latest"
+    "dotenv": "latest",
+    "cors": "latest"
   },
   "devDependencies": {
-    "eslint": "latest",
-    "eslint-config-next": "latest",
     "typescript": "latest",
-    "@types/react": "latest",
-    "@types/node": "latest"
+    "@types/express": "latest",
+    "@types/node": "latest",
+    "@types/cors": "latest",
+    "ts-node-dev": "latest"
   }
 }
