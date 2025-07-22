@@ -9,8 +9,6 @@ const PROVIDERS = [
 ];
 
 export async function getStreamingLinks(type: string, id: string) {
-  // For demonstration, just return embed URLs for each provider
-  // In a real implementation, you may need to adjust the URL format per provider
   return PROVIDERS.map((base) => {
     let url = base;
     if (base.includes('autoembed.cc')) {
