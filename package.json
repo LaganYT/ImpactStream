@@ -16,7 +16,13 @@
     "axios": "latest",
     "dotenv": "latest",
     "cors": "latest",
-    "next": "latest"
+    "next": "latest",
+    "@types/next": "latest",
+    "@types/axios": "latest",
+    "@types/dotenv": "latest",
+    "@types/cors": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest"
   },
   "devDependencies": {
     "typescript": "latest",
