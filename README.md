@@ -1,80 +1,83 @@
-# ImpactStream Backend API
+# How ImpactStream Backend API Works
 
-A backend API for streaming your favorite movies, TV shows, and anime using The Movie Database (TMDB) and multiple streaming providers.
+## Overview
+ImpactStream Backend API is now implemented using Next.js API routes. It provides endpoints to search for movies, TV shows, and anime, fetch detailed information, and generate streaming embed links using The Movie Database (TMDB) and multiple streaming providers. The API is serverless and deployable on Vercel.
 
-## Features
-- Search for movies, TV shows, and anime using the TMDB API
-- Get detailed info for movies and TV shows
-- Get streaming embed links from multiple providers
+## Architecture
+- **Next.js API Routes**: Each endpoint is a file in `pages/api/`, handled serverlessly by Vercel or Next.js.
+- **TypeScript**: Ensures type safety and maintainability.
+- **Axios**: Used for making HTTP requests to external APIs (TMDB, streaming providers).
+- **lib/**: Contains shared logic for TMDB and streaming providers.
 
-## Getting Started
+### Directory Structure
+```
+/ImpactStream
+  /pages
+    /api
+      /movie/[id].ts      # Movie details endpoint
+      /tv/[id].ts         # TV show details endpoint
+      /search.ts          # Search endpoint
+      /stream/[type]/[id].ts # Streaming links endpoint
+  /lib
+    tmdb.ts              # TMDB API logic
+    stream.ts            # Streaming provider logic
+  package.json           # Project dependencies and scripts
+  tsconfig.json          # TypeScript configuration
+  .env.local             # Environment variables (not committed)
+```
 
-### Prerequisites
-- Node.js (v16 or higher)
-- npm or yarn
-- TMDB API key ([Get one here](https://developer.themoviedb.org/docs/getting-started))
+## API Flow
+### 1. Search Endpoint (`/api/search`)
+- Accepts a `query` parameter.
+- Calls TMDB's `/search/multi` endpoint to search for movies, TV shows, and people.
+- Returns the raw TMDB search results.
 
-### Installation
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/LaganYT/ImpactStream.git
-   cd ImpactStream
-   ```
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Create a `.env` file in the root directory and add your TMDB API key:
-   ```env
-   TMDB_API_KEY=your_tmdb_api_key
-   ```
-4. Start the development server:
-   ```bash
-   npm run dev
-   ```
+### 2. Movie Details (`/api/movie/[id]`)
+- Accepts a TMDB movie ID as a URL parameter.
+- Calls TMDB's `/movie/{id}` endpoint to fetch detailed info.
+- Returns the movie details from TMDB.
 
-## API Endpoints
+### 3. TV Show Details (`/api/tv/[id]`)
+- Accepts a TMDB TV show ID as a URL parameter.
+- Calls TMDB's `/tv/{id}` endpoint to fetch detailed info.
+- Returns the TV show details from TMDB.
 
-### Search
-- `GET /api/search?query=...`
-  - Search for movies, TV shows, or anime by query string.
+### 4. Streaming Links (`/api/stream/[type]/[id]`)
+- Accepts a `type` (`movie` or `tv`) and a TMDB ID.
+- Generates a list of embed URLs for various streaming providers, using the ID and type.
+- Returns an array of objects: `{ provider, embedUrl }`.
+- Note: The actual streaming is handled by the third-party providers; this API only generates embed links.
 
-### Movie Details
-- `GET /api/movie/:id`
-  - Get details for a movie by TMDB ID.
+## Integration Details
+### TMDB API
+- Requires a TMDB API key (set in `.env.local` as `TMDB_API_KEY`).
+- All requests to TMDB are made server-side using Axios.
 
-### TV Show Details
-- `GET /api/tv/:id`
-  - Get details for a TV show by TMDB ID.
+### Streaming Providers
+- The API does not host or proxy any video content.
+- It generates embed URLs for known providers (e.g., VidSrc, VidLink, AutoEmbed, etc.).
+- The embed URLs are constructed based on provider patterns and the TMDB ID.
 
-### Streaming Links
-- `GET /api/stream/:type/:id`
-  - Get streaming embed links for a movie or TV show from multiple providers.
-  - `type` is either `movie` or `tv`.
+## Error Handling
+- If TMDB or a provider is unreachable, the API returns a 500 error with a relevant message.
+- If required parameters are missing, the API returns a 400 error.
 
-## Example Usage
+## Security & Limitations
+- The API key is kept server-side and never exposed to clients.
+- The API does not cache or store any data; all results are fetched live.
+- Streaming links are only as reliable as the third-party providers.
 
-- Search:
-  ```bash
-  curl 'http://localhost:3000/api/search?query=Inception'
-  ```
-- Movie details:
-  ```bash
-  curl 'http://localhost:3000/api/movie/27205'
-  ```
-- TV details:
-  ```bash
-  curl 'http://localhost:3000/api/tv/1399'
-  ```
-- Streaming links:
-  ```bash
-  curl 'http://localhost:3000/api/stream/movie/27205'
-  ```
+## Extending the API
+- Add new providers by updating `lib/stream.ts`.
+- Add new endpoints by creating new files in `pages/api/` and corresponding logic in `lib/`.
 
-## Technologies Used
-- [Express](https://expressjs.com/) - Web framework for Node.js
-- [Axios](https://axios-http.com/) - HTTP client for API requests
-- [TMDB API](https://developer.themoviedb.org/) - Movie and TV data
+## Example Request Flow
+1. **Client** sends a search request: `GET /api/search?query=Naruto`.
+2. **API Route** calls TMDB, returns search results.
+3. **Client** requests details: `GET /api/movie/12345`.
+4. **API Route** fetches and returns movie details from TMDB.
+5. **Client** requests streaming links: `GET /api/stream/movie/12345`.
+6. **API Route** generates and returns embed URLs for all providers.
 
-## License
-MIT
+---
+For more, see the main `README.md` for setup and endpoint documentation. 
