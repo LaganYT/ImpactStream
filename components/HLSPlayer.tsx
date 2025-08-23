@@ -29,8 +29,6 @@ export default function HLSPlayer({
   const [showControls, setShowControls] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
 
@@ -147,13 +145,7 @@ export default function HLSPlayer({
           setLoading(false);
         });
 
-        video.addEventListener('timeupdate', () => {
-          setCurrentTime(video.currentTime);
-        });
 
-        video.addEventListener('loadedmetadata', () => {
-          setDuration(video.duration);
-        });
 
         video.addEventListener('volumechange', () => {
           setVolume(video.volume);
@@ -225,25 +217,7 @@ export default function HLSPlayer({
     }
   };
 
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const video = videoRef.current;
-    if (!video) return;
 
-    const newTime = parseFloat(e.target.value);
-    video.currentTime = newTime;
-    setCurrentTime(newTime);
-  };
-
-  const formatTime = (time: number): string => {
-    const hours = Math.floor(time / 3600);
-    const minutes = Math.floor((time % 3600) / 60);
-    const seconds = Math.floor(time % 60);
-
-    if (hours > 0) {
-      return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-    }
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-  };
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -315,18 +289,6 @@ export default function HLSPlayer({
 
       {showControls && !error && (
         <div className="hls-controls">
-          {/* Progress Bar */}
-          <div className="progress-container">
-            <input
-              type="range"
-              min="0"
-              max={duration || 0}
-              value={currentTime}
-              onChange={handleSeek}
-              className="progress-bar"
-            />
-          </div>
-
           {/* Controls Bar */}
           <div className="controls-bar">
             <div className="left-controls">
@@ -359,8 +321,7 @@ export default function HLSPlayer({
               </div>
 
               <div className="time-display">
-                <span>{formatTime(currentTime)}</span>
-                {duration > 0 && <span> / {formatTime(duration)}</span>}
+                <span className="live-indicator">LIVE</span>
               </div>
             </div>
 
