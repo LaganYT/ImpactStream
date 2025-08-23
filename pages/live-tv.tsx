@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import axios from "axios";
-import { FaPlay, FaGlobe, FaYoutube, FaSearch, FaFilter, FaTv, FaGlobeAmericas, FaLanguage } from "react-icons/fa";
+import { FaPlay, FaGlobe, FaYoutube, FaSearch, FaFilter, FaTv, FaGlobeAmericas, FaLanguage, FaChevronLeft, FaChevronRight } from "react-icons/fa";
 
 interface Channel {
   nanoid: string;
@@ -21,6 +21,8 @@ export default function LiveTV() {
   const [selectedLanguage, setSelectedLanguage] = useState("");
   const [selectedCountry, setSelectedCountry] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const channelsPerPage = 50;
 
   useEffect(() => {
     const fetchChannels = async () => {
@@ -44,6 +46,17 @@ export default function LiveTV() {
     return matchesSearch && matchesLanguage && matchesCountry;
   });
 
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedLanguage, selectedCountry]);
+
+  // Calculate pagination
+  const totalPages = Math.ceil(filteredChannels.length / channelsPerPage);
+  const startIndex = (currentPage - 1) * channelsPerPage;
+  const endIndex = startIndex + channelsPerPage;
+  const currentChannels = filteredChannels.slice(startIndex, endIndex);
+
   const languages = Array.from(new Set(channels.map(ch => ch.language).filter(lang => !!lang))).sort();
   const countries = Array.from(new Set(channels.map(ch => ch.country).filter(country => !!country))).sort();
 
@@ -59,6 +72,12 @@ export default function LiveTV() {
     } else {
       return <FaGlobe className="channel-icon iptv" />;
     }
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    // Scroll to top of channels grid
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   if (loading) {
@@ -188,6 +207,11 @@ export default function LiveTV() {
               ? `All ${channels.length} channels available`
               : `${filteredChannels.length} of ${channels.length} channels`
             }
+            {totalPages > 1 && (
+              <span className="page-info">
+                {" "}(Page {currentPage} of {totalPages})
+              </span>
+            )}
           </h3>
           {(selectedLanguage || selectedCountry || searchQuery) && (
             <div className="active-filters">
@@ -200,7 +224,7 @@ export default function LiveTV() {
 
         {/* Channels Grid */}
         <div className="channels-grid">
-          {filteredChannels.map((channel, index) => (
+          {currentChannels.map((channel, index) => (
             <div
               key={channel.nanoid}
               className="channel-card"
@@ -259,6 +283,41 @@ export default function LiveTV() {
             </div>
           ))}
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="pagination">
+            <button 
+              className="pagination-btn"
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+            >
+              <FaChevronLeft />
+              Previous
+            </button>
+            
+            <div className="page-numbers">
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                <button
+                  key={page}
+                  className={`page-number ${page === currentPage ? 'active' : ''}`}
+                  onClick={() => handlePageChange(page)}
+                >
+                  {page}
+                </button>
+              ))}
+            </div>
+            
+            <button 
+              className="pagination-btn"
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages}
+            >
+              Next
+              <FaChevronRight />
+            </button>
+          </div>
+        )}
 
         {/* No Results */}
         {filteredChannels.length === 0 && (
