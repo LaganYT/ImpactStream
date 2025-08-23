@@ -216,19 +216,6 @@ const VideoJSPlayer: React.FC<VideoJSPlayerProps> = ({
           </div>
         </div>
       )}
-
-      {/* Custom overlay controls */}
-      <div className="custom-controls">
-        <button onClick={handlePlayPause} className="control-button">
-          {isPlaying ? <FaPause /> : <FaPlay />}
-        </button>
-        <button onClick={handleMute} className="control-button">
-          {isMuted ? <FaVolumeMute /> : <FaVolumeUp />}
-        </button>
-        <button onClick={handleFullscreen} className="control-button">
-          {isFullscreen ? <FaCompress /> : <FaExpand />}
-        </button>
-      </div>
     </div>
   );
 };
