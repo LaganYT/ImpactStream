@@ -1086,10 +1086,13 @@ button:hover {
   display: flex;
   gap: 0.5rem;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 100%;
 }
 
 .page-number {
-  width: 40px;
+  min-width: 40px;
   height: 40px;
   display: flex;
   align-items: center;
@@ -1101,6 +1104,7 @@ button:hover {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
+  padding: 0 8px;
 }
 
 .page-number:hover {
@@ -1114,6 +1118,28 @@ button:hover {
   color: white;
   border-color: #e50914;
   box-shadow: 0 4px 12px rgba(229, 9, 20, 0.3);
+}
+
+.page-number:not(.active):hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: #e50914;
+  transform: translateY(-2px);
+}
+
+/* Ellipsis styling */
+.page-number.ellipsis {
+  cursor: default;
+  background: transparent;
+  border: none;
+  min-width: auto;
+  padding: 0 4px;
+  color: #b3b3b3;
+}
+
+.page-number.ellipsis:hover {
+  background: transparent;
+  border: none;
+  transform: none;
 }
 
 .page-info {

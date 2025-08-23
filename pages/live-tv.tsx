@@ -80,6 +80,33 @@ export default function LiveTV() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Generate pagination range with ellipsis
+  const getPageNumbers = () => {
+    const delta = 2; // Number of pages to show on each side of current page
+    const range = [];
+    const rangeWithDots = [];
+
+    for (let i = Math.max(2, currentPage - delta); i <= Math.min(totalPages - 1, currentPage + delta); i++) {
+      range.push(i);
+    }
+
+    if (currentPage - delta > 2) {
+      rangeWithDots.push(1, '...');
+    } else {
+      rangeWithDots.push(1);
+    }
+
+    rangeWithDots.push(...range);
+
+    if (currentPage + delta < totalPages - 1) {
+      rangeWithDots.push('...', totalPages);
+    } else if (totalPages > 1) {
+      rangeWithDots.push(totalPages);
+    }
+
+    return rangeWithDots;
+  };
+
   if (loading) {
     return (
       <div className="live-tv">
@@ -297,11 +324,15 @@ export default function LiveTV() {
             </button>
             
             <div className="page-numbers">
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+              {getPageNumbers().map((page, index) => (
                 <button
-                  key={page}
-                  className={`page-number ${page === currentPage ? 'active' : ''}`}
-                  onClick={() => handlePageChange(page)}
+                  key={index}
+                  className={`page-number ${page === currentPage ? 'active' : ''} ${page === '...' ? 'ellipsis' : ''}`}
+                  onClick={() => {
+                    if (typeof page === 'number') {
+                      handlePageChange(page);
+                    }
+                  }}
                 >
                   {page}
                 </button>
