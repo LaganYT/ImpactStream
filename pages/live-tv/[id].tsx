@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import axios from "axios";
-import { FaPlay, FaPause, FaVolumeUp, FaVolumeMute, FaExpand, FaArrowLeft } from "react-icons/fa";
+import { FaArrowLeft } from "react-icons/fa";
+import VideoJSPlayer from "../../components/VideoJSPlayer";
 
 interface Channel {
   nanoid: string;
@@ -19,9 +20,6 @@ export default function TVPlayer() {
   const [channel, setChannel] = useState<Channel | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [streamUrl, setStreamUrl] = useState("");
 
   useEffect(() => {
@@ -53,24 +51,6 @@ export default function TVPlayer() {
       console.error('Error fetching channel:', err);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handlePlayPause = () => {
-    setIsPlaying(!isPlaying);
-  };
-
-  const handleMute = () => {
-    setIsMuted(!isMuted);
-  };
-
-  const handleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen();
-      setIsFullscreen(true);
-    } else {
-      document.exitFullscreen();
-      setIsFullscreen(false);
     }
   };
 
@@ -115,17 +95,15 @@ export default function TVPlayer() {
 
       <div className="video-container">
         {channel.iptv_urls.length > 0 ? (
-          <video
-            className="video-player"
+          <VideoJSPlayer
             src={streamUrl}
-            controls
-            autoPlay
-            muted={isMuted}
-            onPlay={() => setIsPlaying(true)}
-            onPause={() => setIsPlaying(false)}
-          >
-            Your browser does not support the video tag.
-          </video>
+            channelName={channel.name}
+            autoPlay={true}
+            muted={false}
+            onPlay={() => console.log('Playing')}
+            onPause={() => console.log('Paused')}
+            onError={(error) => setError(error)}
+          />
         ) : channel.youtube_urls.length > 0 ? (
           <iframe
             className="video-player"
@@ -143,23 +121,6 @@ export default function TVPlayer() {
             </button>
           </div>
         )}
-      </div>
-
-      <div className="player-controls">
-        <div className="control-group">
-          <button onClick={handlePlayPause} className="control-button">
-            {isPlaying ? <FaPause /> : <FaPlay />}
-          </button>
-          <button onClick={handleMute} className="control-button">
-            {isMuted ? <FaVolumeMute /> : <FaVolumeUp />}
-          </button>
-        </div>
-        
-        <div className="control-group">
-          <button onClick={handleFullscreen} className="control-button">
-            <FaExpand />
-          </button>
-        </div>
       </div>
 
       <div className="channel-details">
