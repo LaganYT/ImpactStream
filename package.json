@@ -19,13 +19,14 @@
   "author": "LaganYT",
   "license": "MIT",
   "dependencies": {
+    "@videojs/themes": "^1.0.1",
     "axios": "latest",
     "hls.js": "^1.6.10",
     "next": "latest",
     "react": "latest",
     "react-dom": "latest",
     "react-icons": "latest",
-    "shaka-player": "^4.15.11"
+    "video.js": "^8.23.4"
   },
   "devDependencies": {
     "@types/node": "latest",
