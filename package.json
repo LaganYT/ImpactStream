@@ -9,21 +9,29 @@
     "start": "next start",
     "lint": "next lint"
   },
-  "keywords": ["streaming", "movies", "tv-shows", "anime", "nextjs"],
+  "keywords": [
+    "streaming",
+    "movies",
+    "tv-shows",
+    "anime",
+    "nextjs"
+  ],
   "author": "LaganYT",
   "license": "MIT",
   "dependencies": {
     "axios": "latest",
+    "hls.js": "^1.6.10",
     "next": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "react-icons": "latest"
+    "react-icons": "latest",
+    "shaka-player": "^4.15.11"
   },
   "devDependencies": {
+    "@types/node": "latest",
+    "@types/react": "latest",
     "eslint": "latest",
     "eslint-config-next": "latest",
-    "typescript": "latest",
-    "@types/react": "latest",
-    "@types/node": "latest"
+    "typescript": "latest"
   }
 }

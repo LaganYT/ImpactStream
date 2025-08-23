@@ -1,7 +1,7 @@
 import React from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
-import { FaGithub } from "react-icons/fa";
+import { FaGithub, FaTv } from "react-icons/fa";
 
 export default function Navbar({ query, setQuery, onSearch }) {
   const router = useRouter();
@@ -16,6 +16,12 @@ export default function Navbar({ query, setQuery, onSearch }) {
   return (
     <nav className="navbar">
       <Link href="/"><h1 className="logo">ImpactStream</h1></Link>
+      <div className="nav-links">
+        <Link href="/" className="nav-link">Home</Link>
+        <Link href="/live-tv" className="nav-link">
+          <FaTv /> Live TV
+        </Link>
+      </div>
       <div className="search-bar">
         <input
           type="text"

@@ -89,6 +89,15 @@ export default function Home() {
             Discover and stream your favorite movies, TV shows, and anime all in
             one place.
           </p>
+          <div className="hero-features">
+            <a href="/live-tv" className="feature-card">
+              <div className="feature-icon">📺</div>
+              <div className="feature-text">
+                <h3>Live TV</h3>
+                <p>Watch live channels from around the world</p>
+              </div>
+            </a>
+          </div>
           <p style={{ color: "#f5f5f5", fontSize: "0.9rem", marginTop: "1rem" }}>
             <strong>Note:</strong> We recommend using an ad blocker for a better experience. You can use {" "}
             <a 
