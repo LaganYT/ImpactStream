@@ -22,6 +22,9 @@ export default function TVDetails() {
   const [selectedApi, setSelectedApi] = useState(
     STREAM_APIS.find((a) => a.url === api) || STREAM_APIS[0]
   );
+  const [seasonNumber, setSeasonNumber] = useState<number>(1);
+  const [episodeNumber, setEpisodeNumber] = useState<number>(1);
+  const [episodesCount, setEpisodesCount] = useState<number>(0);
 
   useEffect(() => {
     if (!id) return;
@@ -47,6 +50,45 @@ export default function TVDetails() {
   }, [api]);
 
   useEffect(() => {
+    // When tvShow is loaded, initialize season and episode selectors
+    if (!tvShow || !id) return;
+    const initialSeason = 1;
+    setSeasonNumber(initialSeason);
+    // Fetch episode count for initial season
+    const fetchSeason = async (season: number) => {
+      try {
+        const { data } = await axios.get(
+          `https://api.themoviedb.org/3/tv/${id}/season/${season}`,
+          { params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY } }
+        );
+        const count = Array.isArray(data.episodes) ? data.episodes.length : 0;
+        setEpisodesCount(count);
+        setEpisodeNumber(count > 0 ? 1 : 0);
+      } catch (_) {
+        setEpisodesCount(0);
+        setEpisodeNumber(0);
+      }
+    };
+    fetchSeason(initialSeason);
+  }, [tvShow, id]);
+
+  const handleSeasonChange = async (value: number) => {
+    setSeasonNumber(value);
+    try {
+      const { data } = await axios.get(
+        `https://api.themoviedb.org/3/tv/${id}/season/${value}`,
+        { params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY } }
+      );
+      const count = Array.isArray(data.episodes) ? data.episodes.length : 0;
+      setEpisodesCount(count);
+      setEpisodeNumber(count > 0 ? 1 : 0);
+    } catch (_) {
+      setEpisodesCount(0);
+      setEpisodeNumber(0);
+    }
+  };
+
+  useEffect(() => {
     const iframe = document.getElementById("framez") as HTMLIFrameElement;
     if (iframe) {
       const currentSrc = iframe.src;
@@ -59,7 +101,7 @@ export default function TVDetails() {
       iframe.src = currentSrc; // Reload iframe
       iframe.sandbox = "allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation";
     }
-  }, [selectedApi, id]);
+  }, [selectedApi, id, seasonNumber, episodeNumber]);
 
   if (!tvShow) return <div className="loading">Loading...</div>;
 
@@ -69,7 +111,7 @@ export default function TVDetails() {
         <iframe
           name="framez"
           id="framez"
-          src={`${selectedApi.url}${id}`}
+          src={`${selectedApi.url}${id}/${seasonNumber}-${episodeNumber}`}
           allowFullScreen
           className="movie-iframe"
         ></iframe>
@@ -91,6 +133,50 @@ export default function TVDetails() {
             </option>
           ))}
         </select>
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 8, marginLeft: 12 }}>
+          <label htmlFor="season-select">Season:</label>
+          <select
+            id="season-select"
+            value={seasonNumber}
+            onChange={(e) => handleSeasonChange(Number(e.target.value))}
+          >
+            {tvShow && Array.from({ length: tvShow.number_of_seasons || 0 }, (_, i) => i + 1).map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+          <label htmlFor="episode-select">Episode:</label>
+          <select
+            id="episode-select"
+            value={episodeNumber}
+            onChange={(e) => setEpisodeNumber(Number(e.target.value))}
+            disabled={episodesCount === 0}
+          >
+            {Array.from({ length: episodesCount || 0 }, (_, i) => i + 1).map((ep) => (
+              <option key={ep} value={ep}>{ep}</option>
+            ))}
+          </select>
+        </div>
+        <button
+          onClick={() => {
+            const popup = window.open(
+              "",
+              "downloadPopup",
+              "width=1000,height=700,menubar=no,toolbar=no,status=no,scrollbars=yes"
+            );
+            if (popup) {
+              const s = seasonNumber;
+              const e = episodeNumber;
+              const dlUrl = `https://dl.vidsrc.vip/tv/${id}/${s}/${e}`;
+              popup.document.write(
+                `<!DOCTYPE html><html><head><title>Download</title><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" /><style>html,body{margin:0;height:100%;background:#000} .frame{border:0;width:100%;height:100%;}</style></head><body><iframe class=\"frame\" src=\"${dlUrl}\" allowfullscreen></iframe></body></html>`
+              );
+              popup.document.close();
+            }
+          }}
+          style={{ marginLeft: 12 }}
+        >
+          Download
+        </button>
       </div>
       <div className="movie-card">
         <div className="movie-header">
