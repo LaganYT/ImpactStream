@@ -117,8 +117,8 @@ export default function TVDetails() {
           className="movie-iframe"
         ></iframe>
       </div>
-      {/*<div className="api-selector">
-        <label htmlFor="api-select">Streaming API:</label>
+      <div className="api-selector">
+        {/*<label htmlFor="api-select">Streaming API:</label>
         <select
           id="api-select"
           value={selectedApi.url}
