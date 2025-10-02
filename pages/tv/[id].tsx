@@ -3,16 +3,8 @@ import axios from "axios";
 import { useEffect, useState } from "react";
 
 const STREAM_APIS = [
-  { name: "Vidsrc.net", url: "https://vidsrc.net/embed/tv/" },
-  { name: "VidSrc.me", url: "https://vidsrc.me/embed/tv/" },
-  { name: "Vidsrc.in", url: "https://vidsrc.in/embed/tv/" },
-  { name: "Vidsrc.pm", url: "https://vidsrc.pm/embed/tv/" },
-  { name: "VidSrc.xyz", url: "https://vidsrc.xyz/embed/tv/" },
-  { name: "VidSrc.cc", url: "https://vidsrc.cc/v3/embed/tv/" },
-  { name: "Embed.su", url: "https://embed.su/embed/tv/" },
-  { name: "VidSrc.icu", url: "https://vidsrc.icu/embed/tv/" },
-  { name: "AutoEmbed.cc", url: "https://player.autoembed.cc/embed/tv/" },
-  { name: "VidSrc.to", url: "https://vidsrc.to/embed/tv/" },
+  { name: "Vidsrc", url: "https://vidsrc.net/embed/tv/" },
+  { name: "AutoEmbed", url: "https://player.autoembed.cc/embed/tv/" },
 ];
 
 export default function TVDetails() {
@@ -92,14 +84,14 @@ export default function TVDetails() {
     const iframe = document.getElementById("framez") as HTMLIFrameElement;
     if (iframe && id) {
       const newSrc = `https://vidsrc.net/embed/tv/${id}/${seasonNumber}-${episodeNumber}`;
-      if (
+      {/*if (
         iframe.sandbox &&
         iframe.sandbox.contains("allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation")
       ) {
         iframe.removeAttribute("sandbox");
-      }
+      }*/}
       iframe.src = newSrc; // Update iframe with new season/episode
-      iframe.sandbox = "allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation";
+      //iframe.sandbox = "allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation";
     }
   }, [selectedApi, id, seasonNumber, episodeNumber]);
 
