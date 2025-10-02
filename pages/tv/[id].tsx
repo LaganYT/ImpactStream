@@ -3,9 +3,9 @@ import axios from "axios";
 import { useEffect, useState } from "react";
 
 const STREAM_APIS = [
+  { name: "Vidsrc.net", url: "https://vidsrc.net/embed/tv/" },
   { name: "VidSrc.me", url: "https://vidsrc.me/embed/tv/" },
   { name: "Vidsrc.in", url: "https://vidsrc.in/embed/tv/" },
-  { name: "Vidsrc.net", url: "https://vidsrc.net/embed/tv/" },
   { name: "Vidsrc.pm", url: "https://vidsrc.pm/embed/tv/" },
   { name: "VidSrc.xyz", url: "https://vidsrc.xyz/embed/tv/" },
   { name: "VidSrc.cc", url: "https://vidsrc.cc/v3/embed/tv/" },
