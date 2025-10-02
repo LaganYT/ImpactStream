@@ -90,15 +90,15 @@ export default function TVDetails() {
 
   useEffect(() => {
     const iframe = document.getElementById("framez") as HTMLIFrameElement;
-    if (iframe) {
-      const currentSrc = iframe.src;
+    if (iframe && id) {
+      const newSrc = `https://vidsrc.net/embed/tv/${id}/${seasonNumber}-${episodeNumber}`;
       if (
         iframe.sandbox &&
         iframe.sandbox.contains("allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation")
       ) {
         iframe.removeAttribute("sandbox");
       }
-      iframe.src = currentSrc; // Reload iframe
+      iframe.src = newSrc; // Update iframe with new season/episode
       iframe.sandbox = "allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation";
     }
   }, [selectedApi, id, seasonNumber, episodeNumber]);
