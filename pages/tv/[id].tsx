@@ -111,12 +111,13 @@ export default function TVDetails() {
         <iframe
           name="framez"
           id="framez"
-          src={`${selectedApi.url}${id}/${seasonNumber}-${episodeNumber}`}
+          //src={`${selectedApi.url}${id}/${seasonNumber}-${episodeNumber}`}
+          src={`https://vidsrc.net/embed/tv/${id}/${seasonNumber}-${episodeNumber}`}
           allowFullScreen
           className="movie-iframe"
         ></iframe>
       </div>
-      <div className="api-selector">
+      /*<div className="api-selector">
         <label htmlFor="api-select">Streaming API:</label>
         <select
           id="api-select"
@@ -132,7 +133,7 @@ export default function TVDetails() {
               {api.name}
             </option>
           ))}
-        </select>
+        </select>*/
         <div style={{ display: "inline-flex", alignItems: "center", gap: 8, marginLeft: 12 }}>
           <label htmlFor="season-select">Season:</label>
           <select
