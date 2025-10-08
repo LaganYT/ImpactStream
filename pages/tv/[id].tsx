@@ -109,47 +109,38 @@ export default function TVDetails() {
           className="movie-iframe"
         ></iframe>
       </div>
-      <div className="api-selector">
-        {/*<label htmlFor="api-select">Streaming API:</label>
-        <select
-          id="api-select"
-          value={selectedApi.url}
-          onChange={(e) =>
-            setSelectedApi(
-              STREAM_APIS.find((api) => api.url === e.target.value)
-            )
-          }
-        >
-          {STREAM_APIS.map((api) => (
-            <option key={api.url} value={api.url}>
-              {api.name}
-            </option>
-          ))}
-        </select>*/}
-        <div style={{ display: "inline-flex", alignItems: "center", gap: 8, marginLeft: 12 }}>
-          <label htmlFor="season-select">Season:</label>
+      <div className="tv-selector-container">
+        <div className="tv-selector-group">
+          <label htmlFor="season-select" className="tv-selector-label">Season:</label>
           <select
             id="season-select"
+            className="tv-selector-select"
             value={seasonNumber}
             onChange={(e) => handleSeasonChange(Number(e.target.value))}
           >
             {tvShow && Array.from({ length: tvShow.number_of_seasons || 0 }, (_, i) => i + 1).map((s) => (
-              <option key={s} value={s}>{s}</option>
+              <option key={s} value={s}>Season {s}</option>
             ))}
           </select>
-          <label htmlFor="episode-select">Episode:</label>
+        </div>
+        
+        <div className="tv-selector-group">
+          <label htmlFor="episode-select" className="tv-selector-label">Episode:</label>
           <select
             id="episode-select"
+            className="tv-selector-select"
             value={episodeNumber}
             onChange={(e) => setEpisodeNumber(Number(e.target.value))}
             disabled={episodesCount === 0}
           >
             {Array.from({ length: episodesCount || 0 }, (_, i) => i + 1).map((ep) => (
-              <option key={ep} value={ep}>{ep}</option>
+              <option key={ep} value={ep}>Episode {ep}</option>
             ))}
           </select>
         </div>
+        
         <button
+          className="tv-download-button"
           onClick={() => {
             const popup = window.open(
               "",
@@ -166,7 +157,6 @@ export default function TVDetails() {
               popup.document.close();
             }
           }}
-          style={{ marginLeft: 12 }}
         >
           Download
         </button>
