@@ -103,7 +103,7 @@ export default function TVDetails() {
           name="framez"
           id="framez"
           //src={`${selectedApi.url}${id}/${seasonNumber}-${episodeNumber}`}
-          src={`ttps://vidsrcprxy.vercel.app/api/player?url=https://vidsrc-embed.ru/embed/tv/${id}/${seasonNumber}/${episodeNumber}?ds_lang=en`}
+          src={`https://vidsrcprxy.vercel.app/api/player?url=https://vidsrc-embed.ru/embed/tv/${id}/${seasonNumber}/${episodeNumber}?ds_lang=en`}
           allowFullScreen
           className="movie-iframe"
         ></iframe>
