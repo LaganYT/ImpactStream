@@ -38,12 +38,6 @@ export default function MovieDetails() {
     }
   }, [api]);
 
-  useEffect(() => {
-    const iframe = document.getElementById("framez") as HTMLIFrameElement;
-    if (iframe) {
-      const currentSrc = iframe.src;
-  }, [selectedApi, id]);
-
   if (!movie) return <div className="loading">Loading...</div>;
 
   const runtime = movie.runtime || movie.episode_run_time?.[0];
@@ -118,4 +112,5 @@ export default function MovieDetails() {
     </div>
   );
 }
+
 
