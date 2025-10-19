@@ -3,17 +3,7 @@ import axios from "axios";
 import { useEffect, useState } from "react";
 
 const STREAM_APIS = [
-  { name: "VidSrc.me", url: "https://vidsrc.me/embed/movie/" },
-  { name: "Vidsrc.in", url: "https://vidsrc.in/embed/movie/" },
-  { name: "Vidsrc.net", url: "https://vidsrc.net/embed/movie/" },
-  { name: "Vidsrc.pm", url: "https://vidsrc.pm/embed/movie/" },
-  { name: "VidSrc.xyz", url: "https://vidsrc.xyz/embed/movie/" },
-  { name: "VidSrc.cc", url: "https://vidsrc.cc/v3/embed/movie/" },
-  { name: "Embed.su", url: "https://embed.su/embed/movie/" },
-  { name: "VidLink.pro", url: "https://vidlink.pro/movie/" },
-  { name: "VidSrc.icu", url: "https://vidsrc.icu/embed/movie/" },
-  { name: "AutoEmbed.cc", url: "https://player.autoembed.cc/embed/movie/" },
-  { name: "VidSrc.to", url: "https://vidsrc.to/embed/movie/" },
+  { name: "VidSrc.me", url: "ttps://vidsrcprxy.vercel.app/api/player?url=https://vidsrc-embed.ru/embed/tv/${id}/${seasonNumber}/${episodeNumber}?ds_lang=en" },
 ];
 
 export default function MovieDetails() {
@@ -52,15 +42,6 @@ export default function MovieDetails() {
     const iframe = document.getElementById("framez") as HTMLIFrameElement;
     if (iframe) {
       const currentSrc = iframe.src;
-      if (
-        iframe.sandbox &&
-        iframe.sandbox.contains("allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation")
-      ) {
-        iframe.removeAttribute("sandbox");
-      }
-      iframe.src = currentSrc; // Reload iframe
-      iframe.sandbox = "allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation";
-    }
   }, [selectedApi, id]);
 
   if (!movie) return <div className="loading">Loading...</div>;
@@ -74,7 +55,7 @@ export default function MovieDetails() {
         <iframe
           name="framez"
           id="framez"
-          src={`${selectedApi.url}${id}`}
+          src={`ttps://vidsrcprxy.vercel.app/api/player?url=https://vidsrc-embed.ru/embed/movie/${id}?ds_lang=en`}
           allowFullScreen
           className="movie-iframe"
         ></iframe>
@@ -137,3 +118,4 @@ export default function MovieDetails() {
     </div>
   );
 }
+
