@@ -3,7 +3,7 @@ import axios from "axios";
 import { useEffect, useState } from "react";
 
 const STREAM_APIS = [
-  { name: "VidSrc.me", url: "https://vidsrcprxy.vercel.app/api/player?url=https://vidsrc-embed.ru/embed/tv/${id}/${seasonNumber}/${episodeNumber}?ds_lang=en" },
+  { name: "VidFast.pro", url: "https://vidfast.pro/movie/${id}" },
 ];
 
 export default function MovieDetails() {
@@ -49,7 +49,7 @@ export default function MovieDetails() {
         <iframe
           name="framez"
           id="framez"
-          src={`https://vidsrcprxy.vercel.app/api/player?url=https://vidsrc-embed.ru/embed/movie/${id}?ds_lang=en`}
+          src={`https://vidfast.pro/movie/${id}?ds_lang=en`}
           allowFullScreen
           className="movie-iframe"
         ></iframe>
@@ -112,6 +112,7 @@ export default function MovieDetails() {
     </div>
   );
 }
+
 
 
 
