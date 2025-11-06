@@ -3,30 +3,11 @@ import type { NextApiRequest, NextApiResponse } from "next";
 type MediaType = "movie" | "tv";
 
 const MOVIE_PROVIDERS: string[] = [
-  "https://vidsrc.me/embed/movie/",
-  "https://vidsrc.in/embed/movie/",
-  "https://vidsrc.net/embed/movie/",
-  "https://vidsrc.pm/embed/movie/",
-  "https://vidsrc.xyz/embed/movie/",
-  "https://vidsrc.cc/v3/embed/movie/",
-  "https://embed.su/embed/movie/",
-  "https://vidlink.pro/movie/",
-  "https://vidsrc.icu/embed/movie/",
-  "https://player.autoembed.cc/embed/movie/",
-  "https://vidsrc.to/embed/movie/",
+  "https://vidfast.pro/movie/",
 ];
 
 const TV_PROVIDERS: string[] = [
-  "https://vidsrc.me/embed/tv/",
-  "https://vidsrc.in/embed/tv/",
-  "https://vidsrc.net/embed/tv/",
-  "https://vidsrc.pm/embed/tv/",
-  "https://vidsrc.xyz/embed/tv/",
-  "https://vidsrc.cc/v3/embed/tv/",
-  "https://embed.su/embed/tv/",
-  "https://vidsrc.icu/embed/tv/",
-  "https://player.autoembed.cc/embed/tv/",
-  "https://vidsrc.to/embed/tv/",
+  "https://vidfast.pro/tv/",
 ];
 
 function selectProviders(type: MediaType): string[] {
