@@ -3,7 +3,7 @@ import axios from "axios";
 import { useEffect, useState } from "react";
 
 const STREAM_APIS = [
-  { name: "Vidsrc", url: "https://vidsrcprxy.vercel.app/api/player?url=https://vidsrc-embed.ru/embed/tv/" },
+  { name: "Vidsrc", url: "https://vidfast.pro/tv/" },
 ];
 
 export default function TVDetails() {
@@ -82,7 +82,7 @@ export default function TVDetails() {
   useEffect(() => {
     const iframe = document.getElementById("framez") as HTMLIFrameElement;
     if (iframe && id) {
-      const newSrc = `https://vidsrcprxy.vercel.app/api/player?url=https://vidsrc-embed.ru/embed/tv/${id}/${seasonNumber}/${episodeNumber}?ds_lang=en`;
+      const newSrc = `https://vidfast.pro/tv/${id}/${seasonNumber}/${episodeNumber}?ds_lang=en`;
       {/*if (
         iframe.sandbox &&
         iframe.sandbox.contains("allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation")
@@ -103,7 +103,7 @@ export default function TVDetails() {
           name="framez"
           id="framez"
           //src={`${selectedApi.url}${id}/${seasonNumber}-${episodeNumber}`}
-          src={`https://vidsrcprxy.vercel.app/api/player?url=https://vidsrc-embed.ru/embed/tv/${id}/${seasonNumber}/${episodeNumber}?ds_lang=en`}
+          src={`https://vidfast.pro/tv/${id}/${seasonNumber}/${episodeNumber}?ds_lang=en`}
           allowFullScreen
           className="movie-iframe"
         ></iframe>
