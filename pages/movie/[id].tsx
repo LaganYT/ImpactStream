@@ -3,7 +3,7 @@ import axios from "axios";
 import { useEffect, useState } from "react";
 
 const STREAM_APIS = [
-  { name: "VidFast.pro", url: "https://vidfast.pro/movie/${id}" },
+  { name: "VidFast.pro", url: "https://111movies.com/movie/${id}" },
 ];
 
 export default function MovieDetails() {
@@ -49,7 +49,7 @@ export default function MovieDetails() {
         <iframe
           name="framez"
           id="framez"
-          src={`https://vidfast.pro/movie/${id}?ds_lang=en`}
+          src={`https://111movies.com/movie/${id}?ds_lang=en`}
           allowFullScreen
           className="movie-iframe"
         ></iframe>
@@ -112,6 +112,7 @@ export default function MovieDetails() {
     </div>
   );
 }
+
 
 
 
