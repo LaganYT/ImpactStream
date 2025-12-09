@@ -3,7 +3,7 @@ import axios from "axios";
 import { useEffect, useState } from "react";
 
 const STREAM_APIS = [
-  { name: "Vidsrc", url: "https://www.vidking.net/embed/tv/?color=e50914&autoPlay=true&nextEpisode=true&episodeSelector=true" },
+  { name: "Vidsrc", url: "https://www.vidking.net/embed/tv/${id}?color=e50914&autoPlay=true&nextEpisode=true&episodeSelector=true" },
 ];
 
 export default function TVDetails() {
