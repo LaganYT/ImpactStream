@@ -3,7 +3,7 @@ import axios from "axios";
 import { useEffect, useState } from "react";
 
 const STREAM_APIS = [
-  { name: "Vidsrc", url: "https://111movies.com/tv/" },
+  { name: "Vidsrc", url: "https://www.vidking.net/embed/tv/?color=e50914&autoPlay=true&nextEpisode=true&episodeSelector=true" },
 ];
 
 export default function TVDetails() {
@@ -82,7 +82,7 @@ export default function TVDetails() {
   useEffect(() => {
     const iframe = document.getElementById("framez") as HTMLIFrameElement;
     if (iframe && id) {
-      const newSrc = `https://111movies.com/tv/${id}/${seasonNumber}/${episodeNumber}?ds_lang=en`;
+      const newSrc = `https://www.vidking.net/embed/tv/${id}/${seasonNumber}/${episodeNumber}?color=e50914&autoPlay=true&nextEpisode=true&episodeSelector=true`;
       {/*if (
         iframe.sandbox &&
         iframe.sandbox.contains("allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation")
