@@ -3,7 +3,7 @@ import axios from "axios";
 import { useEffect, useState } from "react";
 
 const STREAM_APIS = [
-  { name: "Vidsrc", url: "https://www.vidking.net/embed/tv/${id}?color=e50914&autoPlay=true&nextEpisode=true&episodeSelector=true" },
+  { name: "Vidsrc", url: "https://www.vidking.net/embed/tv/${id}/${seasonNumber}/${episodeNumber}?color=e50914&autoPlay=true&nextEpisode=true&episodeSelector=true" },
 ];
 
 export default function TVDetails() {
@@ -103,7 +103,7 @@ export default function TVDetails() {
           name="framez"
           id="framez"
           //src={`${selectedApi.url}${id}/${seasonNumber}-${episodeNumber}`}
-          src={`https://111movies.com/tv/${id}/${seasonNumber}/${episodeNumber}?ds_lang=en`}
+          src={`https://www.vidking.net/embed/tv/${id}/${seasonNumber}/${episodeNumber}?color=e50914&autoPlay=true&nextEpisode=true&episodeSelector=true`}
           allowFullScreen
           className="movie-iframe"
         ></iframe>
