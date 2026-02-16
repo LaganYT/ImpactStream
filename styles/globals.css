@@ -1330,3 +1330,13 @@ button.btn-primary:hover {
 .loading-container p {
   color: #b3b3b3;
 }
+
+/* Footer Love Message */
+.footer-love {
+  margin-top: 0.5rem;
+}
+
+.footer-heart {
+  color: #e50914;
+  display: inline;
+}

@@ -24,7 +24,7 @@ export default function Footer() {
         </div>
         <div className="footer-bottom">
           <p>&copy; {new Date().getFullYear()} ImpactStream. Powered by TMDB and multiple streaming APIs.</p>
-          <p style={{ marginTop: '0.5rem' }}>Made with <FaHeart style={{ color: '#e50914', display: 'inline' }} /> for streaming enthusiasts</p>
+          <p className="footer-love">Made with <FaHeart className="footer-heart" /> for streaming enthusiasts</p>
         </div>
       </div>
     </footer>

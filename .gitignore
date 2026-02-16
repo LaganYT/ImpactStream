@@ -4,5 +4,4 @@ tsconfig.json
 package-lock.json
 .env.local
 next-env.d.ts
-.env.local
 *.backup
