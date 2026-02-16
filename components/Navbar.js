@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
 import { FaGithub, FaTv, FaHome, FaSearch, FaBars, FaTimes } from "react-icons/fa";
@@ -6,6 +6,16 @@ import { FaGithub, FaTv, FaHome, FaSearch, FaBars, FaTimes } from "react-icons/f
 export default function Navbar({ query, setQuery, onSearch }) {
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 0);
+    };
+    
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const handleSearch = () => {
     if (query.trim()) {
@@ -20,7 +30,7 @@ export default function Navbar({ query, setQuery, onSearch }) {
   };
 
   return (
-    <nav className="navbar">
+    <nav className={`navbar ${isScrolled ? 'scrolled' : ''}`}>
       <Link href="/"><h1 className="logo">ImpactStream</h1></Link>
       
       {/* Desktop Navigation */}
