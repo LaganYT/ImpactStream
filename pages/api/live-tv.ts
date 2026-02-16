@@ -10,7 +10,7 @@ export default async function handler(
 
   try {
     const response = await fetch(
-      'https://raw.githubusercontent.com/TVGarden/tv-garden-channel-list/refs/heads/main/channels/raw/categories/all-channels.json'
+      'https://raw.githubusercontent.com/famelack/famelack-channels/refs/heads/main/channels/raw/countries/us.json'
     );
     
     if (!response.ok) {
