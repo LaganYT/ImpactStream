@@ -4,6 +4,8 @@ type RawChannel = {
   stream_urls?: string[];
   iptv_urls?: string[];
   youtube_urls?: string[];
+  languages?: string[];
+  language?: string;
   [key: string]: unknown;
 };
 
@@ -39,9 +41,23 @@ export default async function handler(
       };
     });
 
-    // Keep channels that provide stream or YouTube sources.
+    const allowedLanguages = new Set(['eng', 'en', 'english', 'spa', 'es', 'spanish']);
+
+    // Keep channels that provide stream/YouTube sources and are English or Spanish.
     const validChannels = normalizedChannels.filter(
-      (channel) => channel.iptv_urls.length > 0 || channel.youtube_urls.length > 0
+      (channel) => {
+        const hasPlayableSource = channel.iptv_urls.length > 0 || channel.youtube_urls.length > 0;
+        const langList = [
+          ...(Array.isArray(channel.languages) ? channel.languages : []),
+          ...(typeof channel.language === 'string' ? [channel.language] : []),
+        ]
+          .map((lang) => lang.toLowerCase().trim())
+          .filter(Boolean);
+
+        const isEnglishOrSpanish = langList.some((lang) => allowedLanguages.has(lang));
+
+        return hasPlayableSource && isEnglishOrSpanish;
+      }
     );
 
     res.status(200).json(validChannels);
