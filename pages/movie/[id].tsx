@@ -1,11 +1,23 @@
 import { useRouter } from "next/router";
 import axios from "axios";
 import { useEffect, useState } from "react";
+import {
+  buildDownloadUrl,
+  fetchVideasyDownloadData,
+  SourceItem,
+  SubtitleItem,
+} from "../../utils/videasyDownloader";
 
 export default function MovieDetails() {
   const router = useRouter();
   const { id } = router.query;
   const [movie, setMovie] = useState<any>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
+  const [downloadSources, setDownloadSources] = useState<SourceItem[]>([]);
+  const [downloadSubtitles, setDownloadSubtitles] = useState<SubtitleItem[]>([]);
+  const [downloadError, setDownloadError] = useState("");
+  const [downloadTitle, setDownloadTitle] = useState("");
 
   useEffect(() => {
     if (!id) return;
@@ -29,6 +41,36 @@ export default function MovieDetails() {
   const runtime = movie.runtime || movie.episode_run_time?.[0];
   const releaseDate = movie.release_date || movie.first_air_date;
 
+  const handleDownload = async () => {
+    const tmdbId = Number(Array.isArray(id) ? id[0] : id);
+    if (!tmdbId) return;
+
+    try {
+      setIsDownloading(true);
+      setDownloadError("");
+
+      const title = movie.title || "Movie";
+      const year = (movie.release_date || "").slice(0, 4);
+      const decoded = await fetchVideasyDownloadData({
+        tmdbId,
+        mediaType: "movie",
+        title,
+        year,
+        imdbId: movie.imdb_id || "",
+      });
+
+      setDownloadSources(decoded.sources || []);
+      setDownloadSubtitles(decoded.subtitles || []);
+      setDownloadTitle(`${title}${year ? ` - [${year}]` : ""}`);
+      setIsDownloadModalOpen(true);
+    } catch (error: any) {
+      setDownloadError(error?.message || "Unable to load download sources.");
+      setIsDownloadModalOpen(true);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   return (
     <div className="movie-details-container">
       <div className="movie-player">
@@ -41,24 +83,8 @@ export default function MovieDetails() {
         ></iframe>
       </div>
       <div className="api-selector">
-        <button
-          onClick={() => {
-            const popup = window.open(
-              "",
-              "downloadPopup",
-              "width=1000,height=700,menubar=no,toolbar=no,status=no,scrollbars=yes"
-            );
-            if (popup) {
-              const dlUrl = `https://dl.vidsrc.vip/movie/${id}`;
-              popup.document.write(
-                `<!DOCTYPE html><html><head><title>Download</title><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" /><style>html,body{margin:0;height:100%;background:#000} .frame{border:0;width:100%;height:100%;}</style></head><body><iframe class=\"frame\" src=\"${dlUrl}\" allowfullscreen></iframe></body></html>`
-              );
-              popup.document.close();
-            }
-          }}
-          style={{ marginLeft: 12 }}
-        >
-          Download
+        <button onClick={handleDownload} style={{ marginLeft: 12 }} disabled={isDownloading}>
+          {isDownloading ? "Decoding..." : "Download"}
         </button>
       </div>
       <div className="movie-card">
@@ -79,6 +105,101 @@ export default function MovieDetails() {
           </div>
         </div>
       </div>
+
+      {isDownloadModalOpen ? (
+        <div className="download-modal-backdrop" onClick={() => setIsDownloadModalOpen(false)}>
+          <div className="download-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="download-modal-header">
+              <h3>{downloadTitle || "Download Sources"}</h3>
+              <button
+                className="download-modal-close"
+                onClick={() => setIsDownloadModalOpen(false)}
+                aria-label="Close download popup"
+              >
+                x
+              </button>
+            </div>
+
+            {downloadError ? (
+              <div className="download-modal-error">{downloadError}</div>
+            ) : (
+              <div className="download-modal-body">
+                <h4>Sources</h4>
+                <table className="download-modal-table">
+                  <thead>
+                    <tr>
+                      <th>Quality</th>
+                      <th>Open</th>
+                      <th>Download</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {downloadSources.length ? (
+                      downloadSources.map((src, idx) => (
+                        <tr key={`${src.url}-${idx}`}>
+                          <td>{src.quality || "Unknown"}</td>
+                          <td>
+                            <a href={src.url} target="_blank" rel="noreferrer">
+                              Open
+                            </a>
+                          </td>
+                          <td>
+                            <a
+                              href={buildDownloadUrl(src.url, downloadTitle || movie.title || "video")}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Download
+                            </a>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={3}>No sources</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+
+                <h4>Subtitles</h4>
+                <table className="download-modal-table">
+                  <thead>
+                    <tr>
+                      <th>Language</th>
+                      <th>Open</th>
+                      <th>Download</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {downloadSubtitles.length ? (
+                      downloadSubtitles.map((sub, idx) => (
+                        <tr key={`${sub.url}-${idx}`}>
+                          <td>{sub.language || sub.label || "Unknown"}</td>
+                          <td>
+                            <a href={sub.url} target="_blank" rel="noreferrer">
+                              Open
+                            </a>
+                          </td>
+                          <td>
+                            <a href={sub.url} target="_blank" rel="noreferrer">
+                              Download
+                            </a>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={3}>No subtitles</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
