@@ -2,17 +2,10 @@ import { useRouter } from "next/router";
 import axios from "axios";
 import { useEffect, useState } from "react";
 
-const STREAM_APIS = [
-  { name: "VIDEASY", url: "https://player.videasy.net/movie/${id}?color=e50914&nextEpisode=true&episodeSelector=true" },
-];
-
 export default function MovieDetails() {
   const router = useRouter();
-  const { id, api } = router.query;
+  const { id } = router.query;
   const [movie, setMovie] = useState<any>(null);
-  const [selectedApi, setSelectedApi] = useState(
-    STREAM_APIS.find((a) => a.url === api) || STREAM_APIS[0]
-  );
 
   useEffect(() => {
     if (!id) return;
@@ -31,13 +24,6 @@ export default function MovieDetails() {
     fetchDetails();
   }, [id]);
 
-  useEffect(() => {
-    if (api) {
-      const found = STREAM_APIS.find((a) => a.url === api);
-      if (found) setSelectedApi(found);
-    }
-  }, [api]);
-
   if (!movie) return <div className="loading">Loading...</div>;
 
   const runtime = movie.runtime || movie.episode_run_time?.[0];
@@ -55,22 +41,6 @@ export default function MovieDetails() {
         ></iframe>
       </div>
       <div className="api-selector">
-        <label htmlFor="api-select">Player Provider:</label>
-        <select
-          id="api-select"
-          value={selectedApi.url}
-          onChange={(e) =>
-            setSelectedApi(
-              STREAM_APIS.find((api) => api.url === e.target.value)
-            )
-          }
-        >
-          {STREAM_APIS.map((api) => (
-            <option key={api.url} value={api.url}>
-              {api.name}
-            </option>
-          ))}
-        </select>
         <button
           onClick={() => {
             const popup = window.open(
