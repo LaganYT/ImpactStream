@@ -182,19 +182,27 @@ async function getWasmApi(): Promise<WasmApi> {
         module = await WebAssembly.compile(bytes);
       }
     } else {
-      const serverWasmUrl = getServerWasmUrl();
-      if (serverWasmUrl) {
+      const { readFile } = await import("fs/promises");
+      const { resolve } = await import("path");
+
+      try {
+        // Vercel docs pattern: keep wasm at project root and read via process.cwd().
+        const rootWasmPath = resolve(process.cwd(), "./module.wasm");
+        const bytes = await readFile(rootWasmPath);
+        module = await WebAssembly.compile(bytes);
+      } catch {
+        const serverWasmUrl = getServerWasmUrl();
+        if (!serverWasmUrl) {
+          throw new Error(
+            "Failed to load module.wasm on server. Add ./module.wasm at project root or set VIDEASY_WASM_URL."
+          );
+        }
+
         const response = await fetch(serverWasmUrl);
         if (!response.ok) {
           throw new Error(`Failed to fetch server WASM at ${serverWasmUrl} -> ${response.status}`);
         }
         const bytes = await response.arrayBuffer();
-        module = await WebAssembly.compile(bytes);
-      } else {
-        const { readFile } = await import("fs/promises");
-        const { join } = await import("path");
-        const wasmPath = join(process.cwd(), "public", "module.wasm");
-        const bytes = await readFile(wasmPath);
         module = await WebAssembly.compile(bytes);
       }
     }
