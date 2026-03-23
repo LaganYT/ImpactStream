@@ -2,11 +2,12 @@ import { useRouter } from "next/router";
 import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
 import {
-  buildDownloadUrl,
   fetchVideasyDownloadData,
   SourceItem,
   SubtitleItem,
 } from "../../utils/videasyDownloader";
+import MediaDetailShell from "../../components/MediaDetailShell";
+import DownloadModal from "../../components/DownloadModal";
 
 type AnimeType = "movie" | "tv";
 
@@ -15,6 +16,7 @@ type AnimeDetails = {
   name?: string;
   overview?: string;
   poster_path?: string;
+  backdrop_path?: string;
   vote_average?: number;
   release_date?: string;
   first_air_date?: string;
@@ -23,6 +25,7 @@ type AnimeDetails = {
   number_of_seasons?: number;
   number_of_episodes?: number;
   imdb_id?: string;
+  genres?: { id: number; name: string }[];
   external_ids?: {
     imdb_id?: string;
   };
@@ -35,9 +38,9 @@ export default function AnimeDetailsPage() {
   const animeType: AnimeType = type === "movie" ? "movie" : "tv";
 
   const [anime, setAnime] = useState<AnimeDetails | null>(null);
-  const [seasonNumber, setSeasonNumber] = useState<number>(1);
-  const [episodeNumber, setEpisodeNumber] = useState<number>(1);
-  const [episodesCount, setEpisodesCount] = useState<number>(0);
+  const [seasonNumber, setSeasonNumber] = useState(1);
+  const [episodeNumber, setEpisodeNumber] = useState(1);
+  const [episodesCount, setEpisodesCount] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
   const [downloadSources, setDownloadSources] = useState<SourceItem[]>([]);
@@ -66,10 +69,9 @@ export default function AnimeDetailsPage() {
 
     const fetchSeason = async (season: number) => {
       try {
-        const { data } = await axios.get(
-          `https://api.themoviedb.org/3/tv/${id}/season/${season}`,
-          { params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY } }
-        );
+        const { data } = await axios.get(`https://api.themoviedb.org/3/tv/${id}/season/${season}`, {
+          params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY },
+        });
         const count = Array.isArray(data.episodes) ? data.episodes.length : 0;
         setEpisodesCount(count);
         setEpisodeNumber(count > 0 ? 1 : 0);
@@ -99,6 +101,16 @@ export default function AnimeDetailsPage() {
     }
   };
 
+  const title = anime?.title || anime?.name || "Untitled";
+  const releaseDate = anime?.release_date || anime?.first_air_date || "Unknown";
+  const runtime = anime?.runtime || anime?.episode_run_time?.[0];
+  const posterUrl = anime?.poster_path
+    ? `https://image.tmdb.org/t/p/w500${anime.poster_path}`
+    : "/no-image.svg";
+  const backdropUrl = anime?.backdrop_path
+    ? `https://image.tmdb.org/t/p/original${anime.backdrop_path}`
+    : undefined;
+
   const streamUrl = useMemo(() => {
     if (!id) return "";
     if (animeType === "movie") {
@@ -107,6 +119,35 @@ export default function AnimeDetailsPage() {
 
     return `https://player.videasy.net/tv/${id}/${seasonNumber}/${episodeNumber}?color=e50914&nextEpisode=true&episodeSelector=true&autoplayNextEpisode=true`;
   }, [id, animeType, seasonNumber, episodeNumber]);
+
+  const metadata = useMemo(() => {
+    const base = [
+      { label: "Release", value: releaseDate },
+      { label: "Rating", value: anime?.vote_average ? anime.vote_average.toFixed(1) : "N/A" },
+    ];
+
+    if (animeType === "movie") {
+      return [...base, { label: "Runtime", value: runtime ? `${runtime} min` : "Unknown" }];
+    }
+
+    return [
+      ...base,
+      { label: "Episodes", value: anime?.number_of_episodes ? String(anime.number_of_episodes) : "N/A" },
+      { label: "Seasons", value: anime?.number_of_seasons ? String(anime.number_of_seasons) : "N/A" },
+    ];
+  }, [
+    anime?.number_of_episodes,
+    anime?.number_of_seasons,
+    anime?.vote_average,
+    animeType,
+    releaseDate,
+    runtime,
+  ]);
+
+  const tags = useMemo(
+    () => ["Anime", ...(anime?.genres || []).slice(0, 5).map((genre) => genre.name)],
+    [anime?.genres]
+  );
 
   if (!anime) return <div className="loading">Loading...</div>;
 
@@ -147,178 +188,67 @@ export default function AnimeDetailsPage() {
     }
   };
 
-  const title = anime.title || anime.name || "Untitled";
-  const releaseDate = anime.release_date || anime.first_air_date;
-  const runtime = anime.runtime || anime.episode_run_time?.[0];
-
   return (
-    <div className="movie-details-container">
-      <div className="movie-player">
-        <iframe name="framez" id="framez" src={streamUrl} allowFullScreen className="movie-iframe"></iframe>
-      </div>
+    <>
+      <MediaDetailShell
+        mediaLabel={animeType === "movie" ? "Anime Film" : "Anime Series"}
+        title={title}
+        summary={anime.overview || "No overview is available for this anime yet."}
+        embedUrl={streamUrl}
+        posterUrl={posterUrl}
+        backdropUrl={backdropUrl}
+        metadata={metadata}
+        tags={tags}
+        controls={
+          animeType === "tv" ? (
+            <>
+              <label className="detail-select-field">
+                <span>Season</span>
+                <select value={seasonNumber} onChange={(e) => handleSeasonChange(Number(e.target.value))}>
+                  {Array.from({ length: anime.number_of_seasons || 0 }, (_, i) => i + 1).map((season) => (
+                    <option key={season} value={season}>
+                      Season {season}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-      {animeType === "tv" ? (
-        <div className="tv-selector-container">
-          <div className="tv-selector-group">
-            <label htmlFor="anime-season-select" className="tv-selector-label">Season:</label>
-            <select
-              id="anime-season-select"
-              className="tv-selector-select"
-              value={seasonNumber}
-              onChange={(e) => handleSeasonChange(Number(e.target.value))}
-            >
-              {Array.from({ length: anime.number_of_seasons || 0 }, (_, i) => i + 1).map((s) => (
-                <option key={s} value={s}>Season {s}</option>
-              ))}
-            </select>
-          </div>
+              <label className="detail-select-field">
+                <span>Episode</span>
+                <select
+                  value={episodeNumber}
+                  onChange={(e) => setEpisodeNumber(Number(e.target.value))}
+                  disabled={episodesCount === 0}
+                >
+                  {Array.from({ length: episodesCount || 0 }, (_, i) => i + 1).map((episode) => (
+                    <option key={episode} value={episode}>
+                      Episode {episode}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-          <div className="tv-selector-group">
-            <label htmlFor="anime-episode-select" className="tv-selector-label">Episode:</label>
-            <select
-              id="anime-episode-select"
-              className="tv-selector-select"
-              value={episodeNumber}
-              onChange={(e) => setEpisodeNumber(Number(e.target.value))}
-              disabled={episodesCount === 0}
-            >
-              {Array.from({ length: episodesCount || 0 }, (_, i) => i + 1).map((ep) => (
-                <option key={ep} value={ep}>Episode {ep}</option>
-              ))}
-            </select>
-          </div>
-
-          <button className="tv-download-button" onClick={handleDownload} disabled={isDownloading}>
-            {isDownloading ? "Decoding..." : "Download"}
-          </button>
-        </div>
-      ) : null}
-
-      {animeType === "movie" ? (
-        <div className="api-selector">
-          <button className="tv-download-button" onClick={handleDownload} disabled={isDownloading}>
-            {isDownloading ? "Decoding..." : "Download"}
-          </button>
-        </div>
-      ) : null}
-
-      <div className="movie-card">
-        <div className="movie-header">
-          <img
-            src={`https://image.tmdb.org/t/p/w500${anime.poster_path}`}
-            alt={title}
-            className="movie-poster"
-          />
-          <div className="movie-info">
-            <h1 className="movie-title">{title}</h1>
-            <p className="movie-description">{anime.overview}</p>
-            <div className="movie-metadata">
-              <span>Release: {releaseDate}</span>
-              <span>Rating: {anime.vote_average}</span>
-              {animeType === "movie" ? (
-                <span>Runtime: {runtime} min</span>
-              ) : (
-                <span>Episodes: {anime.number_of_episodes}</span>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {isDownloadModalOpen ? (
-        <div className="download-modal-backdrop" onClick={() => setIsDownloadModalOpen(false)}>
-          <div className="download-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="download-modal-header">
-              <h3>{downloadTitle || "Download Sources"}</h3>
-              <button
-                className="download-modal-close"
-                onClick={() => setIsDownloadModalOpen(false)}
-                aria-label="Close download popup"
-              >
-                x
+              <button onClick={handleDownload} disabled={isDownloading}>
+                {isDownloading ? "Decoding..." : "Download"}
               </button>
-            </div>
+            </>
+          ) : (
+            <button onClick={handleDownload} disabled={isDownloading}>
+              {isDownloading ? "Decoding..." : "Download"}
+            </button>
+          )
+        }
+      />
 
-            {downloadError ? (
-              <div className="download-modal-error">{downloadError}</div>
-            ) : (
-              <div className="download-modal-body">
-                <h4>Sources</h4>
-                <table className="download-modal-table">
-                  <thead>
-                    <tr>
-                      <th>Quality</th>
-                      <th>Open</th>
-                      <th>Download</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {downloadSources.length ? (
-                      downloadSources.map((src, idx) => (
-                        <tr key={`${src.url}-${idx}`}>
-                          <td>{src.quality || "Unknown"}</td>
-                          <td>
-                            <a href={src.url} target="_blank" rel="noreferrer">
-                              Open
-                            </a>
-                          </td>
-                          <td>
-                            <a
-                              href={buildDownloadUrl(src.url, downloadTitle || title || "video")}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              Download
-                            </a>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={3}>No sources</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-
-                <h4>Subtitles</h4>
-                <table className="download-modal-table">
-                  <thead>
-                    <tr>
-                      <th>Language</th>
-                      <th>Open</th>
-                      <th>Download</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {downloadSubtitles.length ? (
-                      downloadSubtitles.map((sub, idx) => (
-                        <tr key={`${sub.url}-${idx}`}>
-                          <td>{sub.language || sub.label || "Unknown"}</td>
-                          <td>
-                            <a href={sub.url} target="_blank" rel="noreferrer">
-                              Open
-                            </a>
-                          </td>
-                          <td>
-                            <a href={sub.url} target="_blank" rel="noreferrer">
-                              Download
-                            </a>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={3}>No subtitles</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-      ) : null}
-    </div>
+      <DownloadModal
+        isOpen={isDownloadModalOpen}
+        title={downloadTitle}
+        error={downloadError}
+        sources={downloadSources}
+        subtitles={downloadSubtitles}
+        fallbackName={title}
+        onClose={() => setIsDownloadModalOpen(false)}
+      />
+    </>
   );
 }

@@ -1,27 +1,33 @@
 import { useRouter } from "next/router";
 import axios from "axios";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  buildDownloadUrl,
   fetchVideasyDownloadData,
   SourceItem,
   SubtitleItem,
 } from "../../utils/videasyDownloader";
+import MediaDetailShell from "../../components/MediaDetailShell";
+import DownloadModal from "../../components/DownloadModal";
 
-const STREAM_APIS = [
-  { name: "VIDEASY", url: "https://player.videasy.net/tv/${id}/${seasonNumber}/${episodeNumber}?color=e50914&nextEpisode=true&episodeSelector=true&autoplayNextEpisode=true" },
-];
+type TVDetails = {
+  name?: string;
+  overview?: string;
+  poster_path?: string;
+  backdrop_path?: string;
+  vote_average?: number;
+  first_air_date?: string;
+  number_of_seasons?: number;
+  number_of_episodes?: number;
+  genres?: { id: number; name: string }[];
+};
 
-export default function TVDetails() {
+export default function TVDetailsPage() {
   const router = useRouter();
-  const { id, api } = router.query;
-  const [tvShow, setTVShow] = useState<any>(null);
-  const [selectedApi, setSelectedApi] = useState(
-    STREAM_APIS.find((a) => a.url === api) || STREAM_APIS[0]
-  );
-  const [seasonNumber, setSeasonNumber] = useState<number>(1);
-  const [episodeNumber, setEpisodeNumber] = useState<number>(1);
-  const [episodesCount, setEpisodesCount] = useState<number>(0);
+  const { id } = router.query;
+  const [tvShow, setTVShow] = useState<TVDetails | null>(null);
+  const [seasonNumber, setSeasonNumber] = useState(1);
+  const [episodeNumber, setEpisodeNumber] = useState(1);
+  const [episodesCount, setEpisodesCount] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
   const [downloadSources, setDownloadSources] = useState<SourceItem[]>([]);
@@ -33,12 +39,9 @@ export default function TVDetails() {
     if (!id) return;
 
     const fetchTVShow = async () => {
-      const { data } = await axios.get(
-        `https://api.themoviedb.org/3/tv/${id}`,
-        {
-          params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY },
-        }
-      );
+      const { data } = await axios.get(`https://api.themoviedb.org/3/tv/${id}`, {
+        params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY },
+      });
       setTVShow(data);
     };
 
@@ -46,65 +49,63 @@ export default function TVDetails() {
   }, [id]);
 
   useEffect(() => {
-    if (api) {
-      const found = STREAM_APIS.find((a) => a.url === api);
-      if (found) setSelectedApi(found);
-    }
-  }, [api]);
-
-  useEffect(() => {
-    // When tvShow is loaded, initialize season and episode selectors
     if (!tvShow || !id) return;
-    const initialSeason = 1;
-    setSeasonNumber(initialSeason);
-    // Fetch episode count for initial season
+
     const fetchSeason = async (season: number) => {
       try {
-        const { data } = await axios.get(
-          `https://api.themoviedb.org/3/tv/${id}/season/${season}`,
-          { params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY } }
-        );
+        const { data } = await axios.get(`https://api.themoviedb.org/3/tv/${id}/season/${season}`, {
+          params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY },
+        });
         const count = Array.isArray(data.episodes) ? data.episodes.length : 0;
         setEpisodesCount(count);
         setEpisodeNumber(count > 0 ? 1 : 0);
-      } catch (_) {
+      } catch {
         setEpisodesCount(0);
         setEpisodeNumber(0);
       }
     };
-    fetchSeason(initialSeason);
+
+    fetchSeason(1);
   }, [tvShow, id]);
 
   const handleSeasonChange = async (value: number) => {
     setSeasonNumber(value);
     try {
-      const { data } = await axios.get(
-        `https://api.themoviedb.org/3/tv/${id}/season/${value}`,
-        { params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY } }
-      );
+      const { data } = await axios.get(`https://api.themoviedb.org/3/tv/${id}/season/${value}`, {
+        params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY },
+      });
       const count = Array.isArray(data.episodes) ? data.episodes.length : 0;
       setEpisodesCount(count);
       setEpisodeNumber(count > 0 ? 1 : 0);
-    } catch (_) {
+    } catch {
       setEpisodesCount(0);
       setEpisodeNumber(0);
     }
   };
 
-  useEffect(() => {
-    const iframe = document.getElementById("framez") as HTMLIFrameElement;
-    if (iframe && id) {
-      const newSrc = `https://player.videasy.net/tv/${id}/${seasonNumber}/${episodeNumber}?color=e50914&nextEpisode=true&episodeSelector=true&autoplayNextEpisode=true`;
-      {/*if (
-        iframe.sandbox &&
-        iframe.sandbox.contains("allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation")
-      ) {
-        iframe.removeAttribute("sandbox");
-      }*/}
-      iframe.src = newSrc; // Update iframe with new season/episode
-      //iframe.sandbox = "allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation";
-    }
-  }, [selectedApi, id, seasonNumber, episodeNumber]);
+  const title = tvShow?.name || "Untitled";
+  const releaseDate = tvShow?.first_air_date || "Unknown";
+  const posterUrl = tvShow?.poster_path
+    ? `https://image.tmdb.org/t/p/w500${tvShow.poster_path}`
+    : "/no-image.svg";
+  const backdropUrl = tvShow?.backdrop_path
+    ? `https://image.tmdb.org/t/p/original${tvShow.backdrop_path}`
+    : undefined;
+
+  const metadata = useMemo(
+    () => [
+      { label: "First Air", value: releaseDate },
+      { label: "Rating", value: tvShow?.vote_average ? tvShow.vote_average.toFixed(1) : "N/A" },
+      { label: "Episodes", value: tvShow?.number_of_episodes ? String(tvShow.number_of_episodes) : "N/A" },
+      { label: "Seasons", value: tvShow?.number_of_seasons ? String(tvShow.number_of_seasons) : "N/A" },
+    ],
+    [releaseDate, tvShow?.number_of_episodes, tvShow?.number_of_seasons, tvShow?.vote_average]
+  );
+
+  const tags = useMemo(
+    () => (tvShow?.genres || []).slice(0, 6).map((genre) => genre.name),
+    [tvShow?.genres]
+  );
 
   if (!tvShow) return <div className="loading">Loading...</div>;
 
@@ -119,7 +120,7 @@ export default function TVDetails() {
       const decoded = await fetchVideasyDownloadData({
         tmdbId,
         mediaType: "tv",
-        title: tvShow.name || "TV Show",
+        title,
         year: (tvShow.first_air_date || "").slice(0, 4),
         seasonId: seasonNumber,
         episodeId: episodeNumber,
@@ -129,7 +130,7 @@ export default function TVDetails() {
       setDownloadSources(decoded.sources || []);
       setDownloadSubtitles(decoded.subtitles || []);
       setDownloadTitle(
-        `${tvShow.name || "TV Show"} | S${seasonNumber}E${episodeNumber}${
+        `${title} | S${seasonNumber}E${episodeNumber}${
           tvShow.first_air_date ? ` - [${String(tvShow.first_air_date).slice(0, 4)}]` : ""
         }`
       );
@@ -143,168 +144,60 @@ export default function TVDetails() {
   };
 
   return (
-    <div className="movie-details-container">
-      <div className="movie-player">
-        <iframe
-          name="framez"
-          id="framez"
-          //src={`${selectedApi.url}${id}/${seasonNumber}-${episodeNumber}`}
-          src={`https://player.videasy.net/tv/${id}/${seasonNumber}/${episodeNumber}?color=e50914&nextEpisode=true&episodeSelector=true&autoplayNextEpisode=true`}
-          allowFullScreen
-          className="movie-iframe"
-        ></iframe>
-      </div>
-      <div className="tv-selector-container">
-        <div className="tv-selector-group">
-          <label htmlFor="season-select" className="tv-selector-label">Season:</label>
-          <select
-            id="season-select"
-            className="tv-selector-select"
-            value={seasonNumber}
-            onChange={(e) => handleSeasonChange(Number(e.target.value))}
-          >
-            {tvShow && Array.from({ length: tvShow.number_of_seasons || 0 }, (_, i) => i + 1).map((s) => (
-              <option key={s} value={s}>Season {s}</option>
-            ))}
-          </select>
-        </div>
-        
-        <div className="tv-selector-group">
-          <label htmlFor="episode-select" className="tv-selector-label">Episode:</label>
-          <select
-            id="episode-select"
-            className="tv-selector-select"
-            value={episodeNumber}
-            onChange={(e) => setEpisodeNumber(Number(e.target.value))}
-            disabled={episodesCount === 0}
-          >
-            {Array.from({ length: episodesCount || 0 }, (_, i) => i + 1).map((ep) => (
-              <option key={ep} value={ep}>Episode {ep}</option>
-            ))}
-          </select>
-        </div>
-        
-        <button
-          className="tv-download-button"
-          onClick={handleDownload}
-          disabled={isDownloading}
-        >
-          {isDownloading ? "Decoding..." : "Download"}
-        </button>
-      </div>
-      <div className="movie-card">
-        <div className="movie-header">
-          <img
-            src={`https://image.tmdb.org/t/p/w500${tvShow.poster_path}`}
-            alt={tvShow.name}
-            className="movie-poster"
-          />
-          <div className="movie-info">
-            <h1 className="movie-title">{tvShow.name}</h1>
-            <p className="movie-description">{tvShow.overview}</p>
-            <div className="movie-metadata">
-              <span>First Air Date: {tvShow.first_air_date}</span>
-              <span>Rating: {tvShow.vote_average}</span>
-              <span>Episodes: {tvShow.number_of_episodes}</span>
-            </div>
-          </div>
-        </div>
-      </div>
+    <>
+      <MediaDetailShell
+        mediaLabel="Series"
+        title={title}
+        summary={tvShow.overview || "No overview is available for this series yet."}
+        embedUrl={`https://player.videasy.net/tv/${id}/${seasonNumber}/${episodeNumber}?color=e50914&nextEpisode=true&episodeSelector=true&autoplayNextEpisode=true`}
+        posterUrl={posterUrl}
+        backdropUrl={backdropUrl}
+        metadata={metadata}
+        tags={tags}
+        controls={
+          <>
+            <label className="detail-select-field">
+              <span>Season</span>
+              <select value={seasonNumber} onChange={(e) => handleSeasonChange(Number(e.target.value))}>
+                {Array.from({ length: tvShow.number_of_seasons || 0 }, (_, i) => i + 1).map((season) => (
+                  <option key={season} value={season}>
+                    Season {season}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-      {isDownloadModalOpen ? (
-        <div className="download-modal-backdrop" onClick={() => setIsDownloadModalOpen(false)}>
-          <div className="download-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="download-modal-header">
-              <h3>{downloadTitle || "Download Sources"}</h3>
-              <button
-                className="download-modal-close"
-                onClick={() => setIsDownloadModalOpen(false)}
-                aria-label="Close download popup"
+            <label className="detail-select-field">
+              <span>Episode</span>
+              <select
+                value={episodeNumber}
+                onChange={(e) => setEpisodeNumber(Number(e.target.value))}
+                disabled={episodesCount === 0}
               >
-                x
-              </button>
-            </div>
+                {Array.from({ length: episodesCount || 0 }, (_, i) => i + 1).map((episode) => (
+                  <option key={episode} value={episode}>
+                    Episode {episode}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-            {downloadError ? (
-              <div className="download-modal-error">{downloadError}</div>
-            ) : (
-              <div className="download-modal-body">
-                <h4>Sources</h4>
-                <table className="download-modal-table">
-                  <thead>
-                    <tr>
-                      <th>Quality</th>
-                      <th>Open</th>
-                      <th>Download</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {downloadSources.length ? (
-                      downloadSources.map((src, idx) => (
-                        <tr key={`${src.url}-${idx}`}>
-                          <td>{src.quality || "Unknown"}</td>
-                          <td>
-                            <a href={src.url} target="_blank" rel="noreferrer">
-                              Open
-                            </a>
-                          </td>
-                          <td>
-                            <a
-                              href={buildDownloadUrl(src.url, downloadTitle || tvShow.name || "video")}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              Download
-                            </a>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={3}>No sources</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+            <button onClick={handleDownload} disabled={isDownloading}>
+              {isDownloading ? "Decoding..." : "Download"}
+            </button>
+          </>
+        }
+      />
 
-                <h4>Subtitles</h4>
-                <table className="download-modal-table">
-                  <thead>
-                    <tr>
-                      <th>Language</th>
-                      <th>Open</th>
-                      <th>Download</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {downloadSubtitles.length ? (
-                      downloadSubtitles.map((sub, idx) => (
-                        <tr key={`${sub.url}-${idx}`}>
-                          <td>{sub.language || sub.label || "Unknown"}</td>
-                          <td>
-                            <a href={sub.url} target="_blank" rel="noreferrer">
-                              Open
-                            </a>
-                          </td>
-                          <td>
-                            <a href={sub.url} target="_blank" rel="noreferrer">
-                              Download
-                            </a>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={3}>No subtitles</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-      ) : null}
-    </div>
+      <DownloadModal
+        isOpen={isDownloadModalOpen}
+        title={downloadTitle}
+        error={downloadError}
+        sources={downloadSources}
+        subtitles={downloadSubtitles}
+        fallbackName={title}
+        onClose={() => setIsDownloadModalOpen(false)}
+      />
+    </>
   );
 }

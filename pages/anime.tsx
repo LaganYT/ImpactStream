@@ -88,6 +88,8 @@ export default function AnimePage() {
     item.poster_path
       ? `https://image.tmdb.org/t/p/w500${item.poster_path}`
       : "/no-image.svg";
+  const getYear = (item: AnimeItem) =>
+    item.first_air_date?.slice(0, 4) || item.release_date?.slice(0, 4) || "N/A";
 
   const getHero = featured[0] || topRated[0] || trending[0];
 
@@ -97,10 +99,25 @@ export default function AnimePage() {
         <section className="discover-hero">
           <div className="discover-hero-copy">
             <p className="discover-kicker">Anime Hub</p>
-            <h1>Stream the best anime in one place.</h1>
+            <h1>Anime nights, organized like a premium streaming shelf.</h1>
             <p>
-              Browse top picks, trending episodes, and fan favorites with one-click playback.
+              Move between popular series, top-rated favorites, and this week's biggest titles
+              with the same watch-first layout used across the rest of ImpactStream.
             </p>
+            <div className="discover-stat-row">
+              <div className="discover-stat-card">
+                <strong>{featured.length || 0}</strong>
+                <span>Popular Picks</span>
+              </div>
+              <div className="discover-stat-card">
+                <strong>{topRated.length || 0}</strong>
+                <span>Top Rated</span>
+              </div>
+              <div className="discover-stat-card">
+                <strong>{trending.length || 0}</strong>
+                <span>Trending Now</span>
+              </div>
+            </div>
           </div>
 
           {getHero ? (
@@ -116,6 +133,9 @@ export default function AnimePage() {
               <div className="discover-spotlight-overlay">
                 <span>Featured Anime</span>
                 <h3>{getTitle(getHero)}</h3>
+                <p>
+                  {getYear(getHero)} • ⭐ {(getHero.vote_average || 0).toFixed(1)}
+                </p>
               </div>
             </div>
           ) : null}
@@ -130,9 +150,15 @@ export default function AnimePage() {
               <h3>Popular Anime</h3>
               <div className="category-scroll">
                 {featured.slice(0, 20).map((item) => (
-                  <div key={`popular-${item.id}`} className="category-item" onClick={() => openAnime(item)}>
+                  <div key={`popular-${item.id}`} className="category-item category-item-rich" onClick={() => openAnime(item)}>
                     <img src={getPoster(item)} alt={getTitle(item)} />
-                    <h4>{getTitle(item)}</h4>
+                    <div className="category-item-copy">
+                      <span className="discover-pill">Popular</span>
+                      <h4>{getTitle(item)}</h4>
+                      <p>
+                        {getYear(item)} • ⭐ {(item.vote_average || 0).toFixed(1)}
+                      </p>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -142,9 +168,15 @@ export default function AnimePage() {
               <h3>Top Rated Anime</h3>
               <div className="category-scroll">
                 {topRated.slice(0, 20).map((item) => (
-                  <div key={`top-${item.id}`} className="category-item" onClick={() => openAnime(item)}>
+                  <div key={`top-${item.id}`} className="category-item category-item-rich" onClick={() => openAnime(item)}>
                     <img src={getPoster(item)} alt={getTitle(item)} />
-                    <h4>{getTitle(item)}</h4>
+                    <div className="category-item-copy">
+                      <span className="discover-pill">Top Rated</span>
+                      <h4>{getTitle(item)}</h4>
+                      <p>
+                        {getYear(item)} • ⭐ {(item.vote_average || 0).toFixed(1)}
+                      </p>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -154,9 +186,15 @@ export default function AnimePage() {
               <h3>Trending This Week</h3>
               <div className="category-scroll">
                 {trending.slice(0, 20).map((item) => (
-                  <div key={`trend-${item.id}`} className="category-item" onClick={() => openAnime(item)}>
+                  <div key={`trend-${item.id}`} className="category-item category-item-rich" onClick={() => openAnime(item)}>
                     <img src={getPoster(item)} alt={getTitle(item)} />
-                    <h4>{getTitle(item)}</h4>
+                    <div className="category-item-copy">
+                      <span className="discover-pill">Trending</span>
+                      <h4>{getTitle(item)}</h4>
+                      <p>
+                        {getYear(item)} • ⭐ {(item.vote_average || 0).toFixed(1)}
+                      </p>
+                    </div>
                   </div>
                 ))}
               </div>
