@@ -182,13 +182,14 @@ export default async function handler(
   }> = [];
 
   const logger: DownloaderLogger = (step, data) => {
-    if (!debugEnabled) return;
     const entry = {
       at: new Date().toISOString(),
       step,
       data,
     };
-    debugTrace.push(entry);
+    if (debugEnabled) {
+      debugTrace.push(entry);
+    }
     console.log(`[details-api:${requestId}] ${step}`, data || {});
   };
 
