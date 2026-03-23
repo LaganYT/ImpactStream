@@ -7,6 +7,7 @@ type MediaType = "movie" | "tv";
 type MediaItem = {
   id: number;
   media_type?: MediaType;
+  genre_ids?: number[];
   title?: string;
   name?: string;
   overview?: string;
@@ -14,11 +15,12 @@ type MediaItem = {
   backdrop_path?: string;
   release_date?: string;
   first_air_date?: string;
+  original_language?: string;
   vote_average?: number;
   popularity?: number;
 };
 
-type FilterType = "all" | MediaType;
+type FilterType = "all" | MediaType | "anime";
 
 export default function Home() {
   const [trending, setTrending] = useState<MediaItem[]>([]);
@@ -33,6 +35,9 @@ export default function Home() {
 
   const normalizeMediaType = (item: MediaItem): MediaType =>
     item.media_type === "tv" || Boolean(item.first_air_date) ? "tv" : "movie";
+
+  const isAnime = (item: MediaItem) =>
+    Boolean(item.genre_ids?.includes(16) && (item.original_language === "ja" || normalizeMediaType(item) === "tv"));
 
   const decorateResults = (items: MediaItem[], forcedType?: MediaType) =>
     items
@@ -77,6 +82,7 @@ export default function Home() {
     const fetchCategories = async () => {
       const endpoints = {
         trending: `https://api.themoviedb.org/3/trending/all/day`,
+        anime: `https://api.themoviedb.org/3/discover/tv`,
         nowPlaying: `https://api.themoviedb.org/3/movie/now_playing`,
         popularMovies: `https://api.themoviedb.org/3/movie/popular`,
         topRatedMovies: `https://api.themoviedb.org/3/movie/top_rated`,
@@ -87,9 +93,17 @@ export default function Home() {
 
       const entries = Object.entries(endpoints);
       const responses = await Promise.all(
-        entries.map(([_, url]) =>
+        entries.map(([key, url]) =>
           axios.get(url, {
-            params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY },
+            params:
+              key === "anime"
+                ? {
+                    api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY,
+                    with_genres: 16,
+                    with_original_language: "ja",
+                    sort_by: "popularity.desc",
+                  }
+                : { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY },
           })
         )
       );
@@ -133,10 +147,17 @@ export default function Home() {
 
   const filteredResults = useMemo(() => {
     if (activeFilter === "all") return searchResults;
+    if (activeFilter === "anime") return searchResults.filter((item) => isAnime(item));
     return searchResults.filter((item) => normalizeMediaType(item) === activeFilter);
   }, [activeFilter, searchResults]);
 
   const handleCardClick = (item: MediaItem) => {
+    if (isAnime(item)) {
+      const type = normalizeMediaType(item);
+      router.push({ pathname: `/anime/${item.id}`, query: { type } });
+      return;
+    }
+
     const type = normalizeMediaType(item);
     router.push({ pathname: `/${type}/${item.id}` });
   };
@@ -199,6 +220,12 @@ export default function Home() {
               >
                 TV Shows ({searchResults.filter((item) => normalizeMediaType(item) === "tv").length})
               </button>
+              <button
+                className={activeFilter === "anime" ? "discover-chip active" : "discover-chip"}
+                onClick={() => setActiveFilter("anime")}
+              >
+                Anime ({searchResults.filter((item) => isAnime(item)).length})
+              </button>
             </div>
 
             {isLoading ? <div className="loading">Searching titles</div> : null}
@@ -220,7 +247,7 @@ export default function Home() {
                 >
                   <img src={getPoster(item)} alt={getTitle(item)} />
                   <div className="discover-card-content">
-                    <span className="discover-pill">{normalizeMediaType(item).toUpperCase()}</span>
+                    <span className="discover-pill">{isAnime(item) ? "ANIME" : normalizeMediaType(item).toUpperCase()}</span>
                     <h3>{getTitle(item)}</h3>
                     <p>{getYear(item)} • ⭐ {(item.vote_average || 0).toFixed(1)}</p>
                   </div>

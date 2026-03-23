@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 
-type MediaType = "movie" | "tv";
+type MediaType = "movie" | "tv" | "anime";
 
 const MOVIE_PROVIDERS: string[] = [
   "https://vidfast.pro/movie/",
@@ -17,9 +17,9 @@ function selectProviders(type: MediaType): string[] {
 function parseInput(req: NextApiRequest): { type: MediaType; id: string } | null {
   const { path, type, id } = req.method === "GET" ? req.query : (req.body ?? {});
 
-  // Accept combined path like "/movie/123" or "tv/456"
+  // Accept combined path like "/movie/123", "tv/456", or "anime/789"
   if (typeof path === "string" && path.length > 0) {
-    const match = path.match(/^\/?(movie|tv)\/(\d+)/i);
+    const match = path.match(/^\/?(movie|tv|anime)\/(\d+)/i);
     if (match) {
       return { type: match[1].toLowerCase() as MediaType, id: match[2] };
     }
@@ -28,7 +28,7 @@ function parseInput(req: NextApiRequest): { type: MediaType; id: string } | null
   // Accept separate type and id
   if (typeof type === "string" && typeof id === "string") {
     const lowered = type.toLowerCase();
-    if ((lowered === "movie" || lowered === "tv") && id.trim()) {
+    if ((lowered === "movie" || lowered === "tv" || lowered === "anime") && id.trim()) {
       return { type: lowered as MediaType, id: id.trim() };
     }
   }
@@ -46,7 +46,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (!parsed) {
     return res.status(400).json({
       error:
-        "Invalid input. Provide either ?path=/movie/{id} or ?type=movie&?id={id} (also supports POST JSON).",
+        "Invalid input. Provide either ?path=/movie/{id} (or /tv/{id}, /anime/{id}) or ?type=movie&?id={id} (also supports POST JSON).",
     });
   }
 

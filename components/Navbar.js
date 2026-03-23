@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
-import { FaGithub, FaTv, FaHome, FaSearch, FaBars, FaTimes } from "react-icons/fa";
+import { FaGithub, FaTv, FaHome, FaSearch, FaBars, FaTimes, FaDragon } from "react-icons/fa";
 
 export default function Navbar({ query, setQuery, onSearch }) {
   const router = useRouter();
@@ -27,6 +27,9 @@ export default function Navbar({ query, setQuery, onSearch }) {
       <div className="nav-links desktop-nav">
         <Link href="/" className="nav-link">
           <FaHome /> Home
+        </Link>
+        <Link href="/anime" className="nav-link">
+          <FaDragon /> Anime
         </Link>
         <Link href="/live-tv" className="nav-link">
           <FaTv /> Live TV
@@ -79,6 +82,9 @@ export default function Navbar({ query, setQuery, onSearch }) {
         <div className="mobile-nav-links">
           <Link href="/" className="mobile-nav-link" onClick={() => setIsMobileMenuOpen(false)}>
             <FaHome /> Home
+          </Link>
+          <Link href="/anime" className="mobile-nav-link" onClick={() => setIsMobileMenuOpen(false)}>
+            <FaDragon /> Anime
           </Link>
           <Link href="/live-tv" className="mobile-nav-link" onClick={() => setIsMobileMenuOpen(false)}>
             <FaTv /> Live TV
