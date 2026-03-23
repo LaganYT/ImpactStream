@@ -6,6 +6,25 @@ import {
   tmdbGet,
   toMediaDetail,
 } from "../../lib/tmdb";
+import { fetchVideasyDownloadData } from "../../utils/videasyDownloader";
+
+type TmdbDetailPayload = {
+  id: number;
+  title?: string;
+  name?: string;
+  release_date?: string;
+  first_air_date?: string;
+  number_of_seasons?: number;
+  imdb_id?: string;
+  external_ids?: {
+    imdb_id?: string;
+  };
+};
+
+function parsePositiveInt(value: unknown, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
 
 export default async function handler(
   req: NextApiRequest,
@@ -33,7 +52,7 @@ export default async function handler(
   try {
     const append =
       tmdbType === "movie" ? "external_ids" : "external_ids";
-    const payload = await tmdbGet<any>(`/${tmdbType}/${id}`, {
+    const payload = await tmdbGet<TmdbDetailPayload>(`/${tmdbType}/${id}`, {
       append_to_response: append,
     });
 
@@ -42,7 +61,55 @@ export default async function handler(
       return res.status(404).json({ error: "Title not found." });
     }
 
-    return res.status(200).json(detail);
+    const releaseYear = (payload.release_date || payload.first_air_date || "")
+      .slice(0, 4)
+      .trim();
+    const seasonId = parsePositiveInt(req.query.seasonId, 1);
+    const episodeId = parsePositiveInt(req.query.episodeId, 1);
+
+    let playbackAvailable = false;
+    let downloadAvailable = false;
+    let authorizedPlaybackUrl: string | null = null;
+    let authorizedDownloadUrl: string | null = null;
+    let availabilityNote = detail.availabilityNote;
+
+    try {
+      const decoded = await fetchVideasyDownloadData({
+        tmdbId: Number(id),
+        mediaType: tmdbType,
+        title: payload.title || payload.name || detail.title,
+        year: releaseYear || undefined,
+        seasonId: tmdbType === "tv" ? seasonId : undefined,
+        episodeId: tmdbType === "tv" ? episodeId : undefined,
+        totalSeasons:
+          tmdbType === "tv" ? Number(payload.number_of_seasons || 0) : undefined,
+        imdbId: payload.imdb_id || payload.external_ids?.imdb_id || undefined,
+      });
+
+      const primarySource = decoded.sources.find((source) => Boolean(source.url));
+      if (primarySource?.url) {
+        playbackAvailable = true;
+        downloadAvailable = true;
+        authorizedPlaybackUrl = primarySource.url;
+        authorizedDownloadUrl = primarySource.url;
+        availabilityNote =
+          "Playback and download are currently enabled via Videasy source authorization.";
+      }
+    } catch (error: any) {
+      availabilityNote =
+        error?.message
+          ? `Playback/download source resolution failed: ${String(error.message)}`
+          : detail.availabilityNote;
+    }
+
+    return res.status(200).json({
+      ...detail,
+      playbackAvailable,
+      downloadAvailable,
+      authorizedPlaybackUrl,
+      authorizedDownloadUrl,
+      availabilityNote,
+    });
   } catch (error: any) {
     return res.status(500).json({
       error: error?.message || "Failed to load title details.",

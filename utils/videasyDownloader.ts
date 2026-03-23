@@ -41,6 +41,10 @@ type WasmApi = {
 
 let wasmApiPromise: Promise<WasmApi> | null = null;
 
+function isBrowserRuntime(): boolean {
+  return typeof window !== "undefined";
+}
+
 function c7(input: string): string {
   const constCodes = CONSTANT_HEX_XOR.split("").map((c) => c.charCodeAt(0));
   return input
@@ -69,6 +73,10 @@ function toMediaTitle(input: DownloadRequest): string {
 }
 
 function getPopup(): Window {
+  if (!isBrowserRuntime()) {
+    throw new Error("Download popup is only available in the browser runtime.");
+  }
+
   const popup = window.open(
     "",
     "downloadPopup",
@@ -149,14 +157,22 @@ async function getWasmApi(): Promise<WasmApi> {
 
   wasmApiPromise = (async () => {
     let module: WebAssembly.Module;
-    try {
-      module = await WebAssembly.compileStreaming(fetch("/module.wasm"));
-    } catch {
-      const response = await fetch("/module.wasm");
-      if (!response.ok) {
-        throw new Error("Failed to load /module.wasm");
+    if (isBrowserRuntime()) {
+      try {
+        module = await WebAssembly.compileStreaming(fetch("/module.wasm"));
+      } catch {
+        const response = await fetch("/module.wasm");
+        if (!response.ok) {
+          throw new Error("Failed to load /module.wasm");
+        }
+        const bytes = await response.arrayBuffer();
+        module = await WebAssembly.compile(bytes);
       }
-      const bytes = await response.arrayBuffer();
+    } else {
+      const { readFile } = await import("fs/promises");
+      const { join } = await import("path");
+      const wasmPath = join(process.cwd(), "public", "module.wasm");
+      const bytes = await readFile(wasmPath);
       module = await WebAssembly.compile(bytes);
     }
 
@@ -192,7 +208,7 @@ function waitForHash(timeoutMs = 5000): Promise<string> {
   const started = Date.now();
   return new Promise((resolve, reject) => {
     const tick = () => {
-      const hash = (window as any).hash;
+      const hash = (globalThis as any).hash;
       if (typeof hash === "string" && hash.length > 0) {
         resolve(hash);
         return;
@@ -213,8 +229,8 @@ async function decodePayload(
   tmdbId: number
 ): Promise<DecodeResult> {
   const wasm = await getWasmApi();
-  (window as any).hash = undefined;
-  Function(wasm.serve())();
+  (globalThis as any).hash = undefined;
+  Function("globalThis", `const window = globalThis; ${wasm.serve()}`)(globalThis);
   const hash = await waitForHash();
   wasm.verify(hash);
 
