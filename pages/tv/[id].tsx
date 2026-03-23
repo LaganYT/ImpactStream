@@ -3,7 +3,7 @@ import axios from "axios";
 import { useEffect, useState } from "react";
 
 const STREAM_APIS = [
-  { name: "Vidsrc", url: "https://www.vidking.net/embed/tv/${id}/${seasonNumber}/${episodeNumber}?color=e50914&autoPlay=true&nextEpisode=true&episodeSelector=true" },
+  { name: "VIDEASY", url: "https://player.videasy.net/tv/${id}/${seasonNumber}/${episodeNumber}?color=e50914&nextEpisode=true&episodeSelector=true&autoplayNextEpisode=true" },
 ];
 
 export default function TVDetails() {
@@ -82,7 +82,7 @@ export default function TVDetails() {
   useEffect(() => {
     const iframe = document.getElementById("framez") as HTMLIFrameElement;
     if (iframe && id) {
-      const newSrc = `https://www.vidking.net/embed/tv/${id}/${seasonNumber}/${episodeNumber}?color=e50914&autoPlay=true&nextEpisode=true&episodeSelector=true`;
+      const newSrc = `https://player.videasy.net/tv/${id}/${seasonNumber}/${episodeNumber}?color=e50914&nextEpisode=true&episodeSelector=true&autoplayNextEpisode=true`;
       {/*if (
         iframe.sandbox &&
         iframe.sandbox.contains("allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation")
@@ -103,7 +103,7 @@ export default function TVDetails() {
           name="framez"
           id="framez"
           //src={`${selectedApi.url}${id}/${seasonNumber}-${episodeNumber}`}
-          src={`https://www.vidking.net/embed/tv/${id}/${seasonNumber}/${episodeNumber}?color=e50914&autoPlay=true&nextEpisode=true&episodeSelector=true`}
+          src={`https://player.videasy.net/tv/${id}/${seasonNumber}/${episodeNumber}?color=e50914&nextEpisode=true&episodeSelector=true&autoplayNextEpisode=true`}
           allowFullScreen
           className="movie-iframe"
         ></iframe>
