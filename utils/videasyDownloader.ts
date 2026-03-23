@@ -45,6 +45,19 @@ function isBrowserRuntime(): boolean {
   return typeof window !== "undefined";
 }
 
+function getServerWasmUrl(): string | null {
+  const explicit = process.env.VIDEASY_WASM_URL || process.env.NEXT_PUBLIC_SITE_URL;
+  if (explicit) {
+    return `${explicit.replace(/\/$/, "")}/module.wasm`;
+  }
+
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}/module.wasm`;
+  }
+
+  return null;
+}
+
 function c7(input: string): string {
   const constCodes = CONSTANT_HEX_XOR.split("").map((c) => c.charCodeAt(0));
   return input
@@ -169,11 +182,21 @@ async function getWasmApi(): Promise<WasmApi> {
         module = await WebAssembly.compile(bytes);
       }
     } else {
-      const { readFile } = await import("fs/promises");
-      const { join } = await import("path");
-      const wasmPath = join(process.cwd(), "public", "module.wasm");
-      const bytes = await readFile(wasmPath);
-      module = await WebAssembly.compile(bytes);
+      const serverWasmUrl = getServerWasmUrl();
+      if (serverWasmUrl) {
+        const response = await fetch(serverWasmUrl);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch server WASM at ${serverWasmUrl} -> ${response.status}`);
+        }
+        const bytes = await response.arrayBuffer();
+        module = await WebAssembly.compile(bytes);
+      } else {
+        const { readFile } = await import("fs/promises");
+        const { join } = await import("path");
+        const wasmPath = join(process.cwd(), "public", "module.wasm");
+        const bytes = await readFile(wasmPath);
+        module = await WebAssembly.compile(bytes);
+      }
     }
 
     const instance = await WebAssembly.instantiate(module, {
@@ -307,13 +330,16 @@ export async function fetchVideasyDownloadData(input: DownloadRequest): Promise<
   const endpointSlow = "https://api.videasy.net/e3b0c442/sources-with-title";
 
   let decodedFast: DecodeResult | null = null;
+  let fastError = "";
   try {
     decodedFast = await tryFetchByEndpoint(endpointFast, params, b35, input.tmdbId);
-  } catch {
+  } catch (error: any) {
     decodedFast = null;
+    fastError = String(error?.message || error || "unknown fast endpoint error");
   }
 
   let decodedSlow: DecodeResult | null = null;
+  let slowError = "";
   try {
     const loc = await getIpLocation();
     decodedSlow = await tryFetchByEndpoint(
@@ -322,8 +348,9 @@ export async function fetchVideasyDownloadData(input: DownloadRequest): Promise<
       b35,
       input.tmdbId
     );
-  } catch {
+  } catch (error: any) {
     decodedSlow = null;
+    slowError = String(error?.message || error || "unknown slow endpoint error");
   }
 
   const merged = {
@@ -341,7 +368,11 @@ export async function fetchVideasyDownloadData(input: DownloadRequest): Promise<
   };
 
   if (!merged.sources.length) {
-    throw new Error("No sources returned from either endpoint");
+    const details = [
+      fastError ? `fast=${fastError}` : "fast=ok-but-empty",
+      slowError ? `slow=${slowError}` : "slow=ok-but-empty",
+    ].join("; ");
+    throw new Error(`No sources returned from either endpoint (${details})`);
   }
 
   return merged;
