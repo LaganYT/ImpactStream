@@ -1,18 +1,13 @@
 # ImpactStream
 
-A way to stream your favorite movies, TV shows, and anime using multiple streaming APIs.
+A way to stream your favorite movies and TV shows with the VIDEASY player.
 
 ## Features
 
 - Search for movies, TV shows, and anime using The Movie Database (TMDB) API.
-- Stream content using embed links from:
-  - [VidSrc](https://vidsrc.me)
-  - [VidLink](https://vidlink.pro)
-  - [AutoEmbed](https://autoembed.cc)
-  - [Embed.su](https://embed.su)
-  - [VidSrc.cc](https://vidsrc.cc)
-  - [VidSrc.icu](https://vidsrc.icu)
-  - [VidSrc.to](https://vidsrc.to)
+- Stream content with [VIDEASY](https://player.videasy.net).
+- Movie URL format: `https://player.videasy.net/movie/{tmdbMovieId}`
+- TV URL format: `https://player.videasy.net/tv/{tmdbShowId}/{season}/{episode}`
 - Responsive and user-friendly interface.
 - Customizable player options.
 
@@ -51,9 +46,9 @@ A way to stream your favorite movies, TV shows, and anime using multiple streami
 
 ## Usage
 
-1. Use the search bar on the homepage to search for movies, TV shows, or anime.
-2. Select a result to view detailed information and available streaming options.
-3. Click on a streaming link to start watching content directly in the embedded player.
+1. Use the search bar on the homepage to search for movies or TV shows.
+2. Select a result to view details and open the embedded VIDEASY player.
+3. Optionally adjust player options via URL parameters.
 
 ## Technologies Used
 
@@ -68,4 +63,4 @@ This project is licensed under the MIT License. See the LICENSE file for details
 ## Acknowledgments
 
 - [TMDB](https://www.themoviedb.org/) for providing movie and TV show data.
-- Various streaming APIs for embedding content.
+- [VIDEASY](https://player.videasy.net) for embedded playback.

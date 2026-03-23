@@ -55,7 +55,7 @@ export default function MovieDetails() {
         ></iframe>
       </div>
       <div className="api-selector">
-        <label htmlFor="api-select">Streaming API:</label>
+        <label htmlFor="api-select">Player Provider:</label>
         <select
           id="api-select"
           value={selectedApi.url}
