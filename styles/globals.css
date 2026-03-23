@@ -2433,3 +2433,426 @@ button:active {
   font-size: 13px;
   font-weight: 500;
 }
+
+/* Redesigned Discover + Detail Views */
+.discover-shell,
+.detail-shell {
+  --impact-canvas: #0c111d;
+  --impact-panel: rgba(255, 255, 255, 0.06);
+  --impact-panel-strong: rgba(255, 255, 255, 0.12);
+  --impact-border: rgba(255, 255, 255, 0.16);
+  --impact-text: #f8fbff;
+  --impact-text-muted: rgba(248, 251, 255, 0.72);
+  --impact-accent: #ff6b1a;
+  --impact-accent-strong: #ff8d2f;
+  --impact-shadow: 0 20px 48px rgba(0, 0, 0, 0.4);
+  font-family: "Space Grotesk", "Sora", "Avenir Next", sans-serif;
+}
+
+.discover-home {
+  min-height: calc(100vh - 160px);
+}
+
+.discover-shell {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.discover-hero {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 1.4rem;
+  margin-bottom: 2.4rem;
+  align-items: stretch;
+}
+
+.discover-hero-copy,
+.discover-spotlight {
+  border-radius: 24px;
+  border: 1px solid var(--impact-border);
+  background:
+    radial-gradient(circle at top right, rgba(255, 141, 47, 0.24), transparent 55%),
+    linear-gradient(145deg, rgba(12, 17, 29, 0.94), rgba(17, 26, 45, 0.9));
+  box-shadow: var(--impact-shadow);
+}
+
+.discover-hero-copy {
+  padding: 2.4rem;
+}
+
+.discover-kicker {
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--impact-accent-strong);
+  margin-bottom: 0.6rem;
+}
+
+.discover-hero-copy h1 {
+  font-size: clamp(2rem, 3.5vw, 3.3rem);
+  line-height: 1.05;
+  margin-bottom: 0.9rem;
+  color: var(--impact-text);
+}
+
+.discover-hero-copy p {
+  color: var(--impact-text-muted);
+  max-width: 54ch;
+}
+
+.discover-live-link {
+  margin-top: 1.3rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(145deg, var(--impact-accent), var(--impact-accent-strong));
+  border-radius: 999px;
+  padding: 0.7rem 1.2rem;
+  font-weight: 700;
+  color: #111;
+}
+
+.discover-spotlight {
+  position: relative;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.discover-spotlight img {
+  width: 100%;
+  height: 100%;
+  min-height: 280px;
+  object-fit: cover;
+  opacity: 0.88;
+}
+
+.discover-spotlight-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 1.2rem;
+  background: linear-gradient(180deg, transparent, rgba(6, 11, 20, 0.92));
+}
+
+.discover-spotlight-overlay span {
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--impact-accent-strong);
+}
+
+.discover-spotlight-overlay h3 {
+  margin-top: 0.35rem;
+  font-size: 1.2rem;
+}
+
+.discover-search-panel {
+  background:
+    radial-gradient(circle at top right, rgba(255, 141, 47, 0.18), transparent 50%),
+    linear-gradient(135deg, rgba(12, 17, 29, 0.94), rgba(21, 31, 51, 0.9));
+  border: 1px solid var(--impact-border);
+  border-radius: 24px;
+  padding: 1.4rem;
+  box-shadow: var(--impact-shadow);
+}
+
+.discover-search-header h1 {
+  font-size: clamp(1.9rem, 2.8vw, 2.5rem);
+  letter-spacing: -0.02em;
+}
+
+.discover-search-header p {
+  color: var(--impact-text-muted);
+  margin-top: 0.3rem;
+}
+
+.discover-refine-row {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.65rem;
+}
+
+.discover-refine-row input {
+  border-radius: 14px;
+  border: 1px solid var(--impact-border);
+  background: rgba(12, 17, 29, 0.75);
+  color: var(--impact-text);
+  padding: 0.72rem 0.95rem;
+}
+
+.discover-filter-row {
+  margin-top: 0.9rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.discover-chip {
+  border: 1px solid var(--impact-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--impact-text);
+  padding: 0.55rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  box-shadow: none;
+}
+
+.discover-chip.active,
+.discover-chip:hover {
+  border-color: var(--impact-accent-strong);
+  background: rgba(255, 141, 47, 0.2);
+}
+
+.discover-grid {
+  margin-top: 1.1rem;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+}
+
+.discover-card {
+  background: var(--impact-panel);
+  border: 1px solid var(--impact-border);
+  border-radius: 16px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.24s ease, border-color 0.24s ease;
+}
+
+.discover-card:hover {
+  transform: translateY(-6px);
+  border-color: rgba(255, 141, 47, 0.7);
+}
+
+.discover-card img {
+  width: 100%;
+  height: 260px;
+  object-fit: cover;
+}
+
+.discover-card-content {
+  padding: 0.75rem;
+}
+
+.discover-card-content h3 {
+  font-size: 0.92rem;
+  line-height: 1.35;
+  min-height: 2.5em;
+}
+
+.discover-card-content p {
+  margin-top: 0.3rem;
+  color: var(--impact-text-muted);
+  font-size: 0.8rem;
+}
+
+.discover-pill {
+  display: inline-block;
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  border: 1px solid var(--impact-border);
+  border-radius: 999px;
+  padding: 0.18rem 0.52rem;
+  color: var(--impact-accent-strong);
+  margin-bottom: 0.45rem;
+}
+
+.discover-empty {
+  text-align: center;
+  padding: 1.4rem;
+  border-radius: 14px;
+  border: 1px dashed var(--impact-border);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.discover-error {
+  margin-top: 0.7rem;
+  color: #ff8f8f;
+}
+
+.discover-category h3::after {
+  background: linear-gradient(90deg, var(--impact-accent), var(--impact-accent-strong));
+}
+
+.detail-shell {
+  max-width: 1280px;
+  margin: 1.5rem auto;
+  padding: 0 1rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.9fr);
+  gap: 1rem;
+}
+
+.detail-player-panel,
+.detail-info-panel {
+  border-radius: 22px;
+  border: 1px solid var(--impact-border);
+  background:
+    radial-gradient(circle at top right, rgba(255, 141, 47, 0.12), transparent 60%),
+    linear-gradient(135deg, rgba(12, 17, 29, 0.93), rgba(17, 26, 45, 0.92));
+  box-shadow: var(--impact-shadow);
+}
+
+.detail-player-panel {
+  padding: 1rem;
+}
+
+.detail-panel-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  margin-bottom: 0.85rem;
+}
+
+.detail-type {
+  font-size: 0.72rem;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--impact-accent-strong);
+  margin-bottom: 0.35rem;
+}
+
+.detail-panel-header h1 {
+  font-size: clamp(1.35rem, 2.4vw, 2rem);
+  line-height: 1.12;
+}
+
+.detail-actions {
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.detail-actions button {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--impact-panel-strong);
+  color: var(--impact-text);
+  box-shadow: none;
+}
+
+.detail-actions button:hover {
+  border-color: var(--impact-accent-strong);
+}
+
+.detail-player-frame {
+  margin-bottom: 0.85rem;
+}
+
+.detail-control-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.detail-episode-nav {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.detail-episode-nav button {
+  width: 100%;
+  box-shadow: none;
+}
+
+.detail-episode-nav button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.detail-now-playing {
+  margin-top: 0.72rem;
+  color: var(--impact-text-muted);
+  font-size: 0.9rem;
+}
+
+.detail-info-panel {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  position: sticky;
+  top: 86px;
+  max-height: calc(100vh - 110px);
+  overflow: auto;
+}
+
+.detail-overview {
+  color: var(--impact-text-muted);
+  line-height: 1.65;
+}
+
+.detail-meta {
+  margin-top: 0.8rem;
+}
+
+.detail-tags {
+  margin-top: 0.9rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.detail-tag {
+  border: 1px solid var(--impact-border);
+  border-radius: 999px;
+  padding: 0.28rem 0.64rem;
+  font-size: 0.78rem;
+  color: var(--impact-text-muted);
+}
+
+.detail-backdrop-wrap {
+  margin-top: 0.7rem;
+}
+
+.detail-backdrop {
+  width: 100%;
+  border-radius: 14px;
+  max-height: 180px;
+  object-fit: cover;
+  border: 1px solid var(--impact-border);
+}
+
+@media (max-width: 1024px) {
+  .discover-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-info-panel {
+    position: static;
+    max-height: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .discover-shell {
+    padding: 1rem;
+  }
+
+  .discover-refine-row {
+    grid-template-columns: 1fr;
+  }
+
+  .discover-card img {
+    height: 220px;
+  }
+
+  .detail-panel-header {
+    flex-direction: column;
+  }
+
+  .detail-control-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-episode-nav {
+    width: 100%;
+  }
+}

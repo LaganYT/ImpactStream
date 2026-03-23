@@ -1,49 +1,82 @@
 import axios from "axios";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
 
+type MediaType = "movie" | "tv";
+
+type MediaItem = {
+  id: number;
+  media_type?: MediaType;
+  title?: string;
+  name?: string;
+  overview?: string;
+  poster_path?: string;
+  backdrop_path?: string;
+  release_date?: string;
+  first_air_date?: string;
+  vote_average?: number;
+  popularity?: number;
+};
+
+type FilterType = "all" | MediaType;
+
 export default function Home() {
-  const [trending, setTrending] = useState([]);
-  const [categories, setCategories] = useState<Record<string, any[]>>({}); // Explicitly typed
+  const [trending, setTrending] = useState<MediaItem[]>([]);
+  const [categories, setCategories] = useState<Record<string, MediaItem[]>>({});
   const [query, setQuery] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [searchResults, setSearchResults] = useState<MediaItem[]>([]);
+  const [activeFilter, setActiveFilter] = useState<FilterType>("all");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
   const router = useRouter();
+
+  const normalizeMediaType = (item: MediaItem): MediaType =>
+    item.media_type === "tv" || Boolean(item.first_air_date) ? "tv" : "movie";
+
+  const decorateResults = (items: MediaItem[], forcedType?: MediaType) =>
+    items
+      .filter((item) => item?.id)
+      .map((item) => ({
+        ...item,
+        media_type: forcedType || normalizeMediaType(item),
+      }))
+      .sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
 
   useEffect(() => {
     const fetchTrending = async () => {
-      const { data: movies } = await axios.get(
-        `https://api.themoviedb.org/3/trending/movie/day`,
-        {
+      const [movieRes, tvRes] = await Promise.all([
+        axios.get(`https://api.themoviedb.org/3/trending/movie/day`, {
           params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY },
-        }
-      );
-      const { data: tvShows } = await axios.get(
-        `https://api.themoviedb.org/3/trending/tv/day`,
-        {
+        }),
+        axios.get(`https://api.themoviedb.org/3/trending/tv/day`, {
           params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY },
-        }
-      );
-      setTrending([...movies.results, ...tvShows.results]);
+        }),
+      ]);
+
+      const movies = decorateResults(movieRes.data.results || [], "movie");
+      const shows = decorateResults(tvRes.data.results || [], "tv");
+      setTrending([...movies.slice(0, 6), ...shows.slice(0, 6)]);
     };
 
-    const fetchSearchResults = async (searchQuery) => {
-      const { data: movies } = await axios.get(
-        `https://api.themoviedb.org/3/search/movie`,
-        {
+    const fetchSearchResults = async (searchQuery: string) => {
+      const [moviesRes, tvRes] = await Promise.all([
+        axios.get(`https://api.themoviedb.org/3/search/movie`, {
           params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY, query: searchQuery },
-        }
-      );
-      const { data: tvShows } = await axios.get(
-        `https://api.themoviedb.org/3/search/tv`,
-        {
+        }),
+        axios.get(`https://api.themoviedb.org/3/search/tv`, {
           params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY, query: searchQuery },
-        }
-      );
-      setTrending([...movies.results, ...tvShows.results]);
+        }),
+      ]);
+
+      const movieResults = decorateResults(moviesRes.data.results || [], "movie");
+      const tvResults = decorateResults(tvRes.data.results || [], "tv");
+      setSearchResults([...movieResults, ...tvResults]);
     };
 
     const fetchCategories = async () => {
       const endpoints = {
-        trending: `https://api.themoviedb.org/3/trending/all/day`, // Explicitly added trending
+        trending: `https://api.themoviedb.org/3/trending/all/day`,
         nowPlaying: `https://api.themoviedb.org/3/movie/now_playing`,
         popularMovies: `https://api.themoviedb.org/3/movie/popular`,
         topRatedMovies: `https://api.themoviedb.org/3/movie/top_rated`,
@@ -52,13 +85,20 @@ export default function Home() {
         onTheAir: `https://api.themoviedb.org/3/tv/on_the_air`,
       };
 
-      const categoryData: Record<string, any[]> = {};
-      for (const [key, url] of Object.entries(endpoints)) {
-        const { data } = await axios.get(url, {
-          params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY },
-        });
-        categoryData[key] = data.results;
-      }
+      const entries = Object.entries(endpoints);
+      const responses = await Promise.all(
+        entries.map(([_, url]) =>
+          axios.get(url, {
+            params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY },
+          })
+        )
+      );
+
+      const categoryData: Record<string, MediaItem[]> = {};
+      entries.forEach(([key], index) => {
+        categoryData[key] = decorateResults(responses[index].data.results || []);
+      });
+
       setCategories(categoryData);
     };
 
@@ -66,119 +106,184 @@ export default function Home() {
       ? router.query.query[0]
       : router.query.query;
 
-    if (searchQuery) {
-      setQuery(searchQuery);
-      fetchSearchResults(searchQuery);
-    } else {
-      fetchTrending();
-      fetchCategories();
-    }
+    const initialize = async () => {
+      try {
+        setIsLoading(true);
+        setError("");
+
+        if (searchQuery) {
+          setQuery(searchQuery);
+          setSearchInput(searchQuery);
+          await fetchSearchResults(searchQuery);
+        } else {
+          setQuery("");
+          setSearchInput("");
+          setSearchResults([]);
+          await Promise.all([fetchTrending(), fetchCategories()]);
+        }
+      } catch {
+        setError("Something went wrong while loading content. Please try again.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    initialize();
   }, [router.query]);
 
-  const handleCardClick = (item: any) => {
-    const type = item.media_type === "tv" || item.first_air_date ? "tv" : "movie";
+  const filteredResults = useMemo(() => {
+    if (activeFilter === "all") return searchResults;
+    return searchResults.filter((item) => normalizeMediaType(item) === activeFilter);
+  }, [activeFilter, searchResults]);
+
+  const handleCardClick = (item: MediaItem) => {
+    const type = normalizeMediaType(item);
     router.push({ pathname: `/${type}/${item.id}` });
   };
 
+  const handleRefinedSearch = () => {
+    if (!searchInput.trim()) return;
+    router.push({ pathname: "/", query: { query: searchInput.trim() } });
+  };
+
+  const getTitle = (item: MediaItem) => item.title || item.name || "Untitled";
+  const getYear = (item: MediaItem) =>
+    item.release_date?.slice(0, 4) || item.first_air_date?.slice(0, 4) || "N/A";
+  const getPoster = (item: MediaItem) =>
+    item.poster_path
+      ? `https://image.tmdb.org/t/p/w500${item.poster_path}`
+      : "/no-image.svg";
+  const heroSpotlight = trending[0];
+
   return (
-    <div className="home">
-      <main className="container">
-        <header className="hero">
-          <h1>Welcome to ImpactStream</h1>
-          <p>
-            Discover and stream your favorite movies, TV shows, and anime all in
-            one place.
-          </p>
-          <div className="hero-features">
-            <a href="/live-tv" className="feature-card">
-              <div className="feature-icon">📺</div>
-              <div className="feature-text">
-                <h3>Live TV</h3>
-                <p>Watch live channels from around the world</p>
-              </div>
-            </a>
-          </div>
-          <p style={{ color: "#f5f5f5", fontSize: "0.9rem", marginTop: "1rem" }}>
-            <strong>Note:</strong> We recommend using an ad blocker for a better experience. You can use {" "}
-            <a 
-              href="https://chromewebstore.google.com/detail/adblock-%E2%80%94-block-ads-acros/gighmmpiobklfepjocnamgkkbiglidom?hl=en-US" 
-              target="_blank" 
-              rel="noopener noreferrer" 
-              style={{ color: "#e50914", textDecoration: "underline" }}
-            >
-              AdBlock
-            </a> {" "}or try the{" "}
-            <a 
-              href="https://brave.com/" 
-              target="_blank" 
-              rel="noopener noreferrer" 
-              style={{ color: "#e50914", textDecoration: "underline" }}
-            >
-              Brave browser
-            </a>.
-          </p>
-        </header>
+    <div className="home discover-home">
+      <main className="container discover-shell">
         {query ? (
-          <section className="search-results">
-            <h2>Search Results for "{query}"</h2>
-            <div className="search-scroll">
-              {trending.map((item: any) => (
-                <div
-                  key={item.id}
-                  className="search-item"
+          <section className="discover-search-panel">
+            <div className="discover-search-header">
+              <h1>Search Results</h1>
+              <p>
+                Showing titles for <strong>{query}</strong>
+              </p>
+            </div>
+
+            <div className="discover-refine-row">
+              <input
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleRefinedSearch();
+                }}
+                placeholder="Refine your search"
+                aria-label="Refine search"
+              />
+              <button onClick={handleRefinedSearch}>Search</button>
+            </div>
+
+            <div className="discover-filter-row">
+              <button
+                className={activeFilter === "all" ? "discover-chip active" : "discover-chip"}
+                onClick={() => setActiveFilter("all")}
+              >
+                All ({searchResults.length})
+              </button>
+              <button
+                className={activeFilter === "movie" ? "discover-chip active" : "discover-chip"}
+                onClick={() => setActiveFilter("movie")}
+              >
+                Movies ({searchResults.filter((item) => normalizeMediaType(item) === "movie").length})
+              </button>
+              <button
+                className={activeFilter === "tv" ? "discover-chip active" : "discover-chip"}
+                onClick={() => setActiveFilter("tv")}
+              >
+                TV Shows ({searchResults.filter((item) => normalizeMediaType(item) === "tv").length})
+              </button>
+            </div>
+
+            {isLoading ? <div className="loading">Searching titles</div> : null}
+            {error ? <p className="discover-error">{error}</p> : null}
+
+            {!isLoading && !error && filteredResults.length === 0 ? (
+              <div className="discover-empty">
+                <h3>No results found</h3>
+                <p>Try a different keyword or switch to another filter.</p>
+              </div>
+            ) : null}
+
+            <div className="discover-grid">
+              {filteredResults.map((item) => (
+                <article
+                  key={`${normalizeMediaType(item)}-${item.id}`}
+                  className="discover-card"
                   onClick={() => handleCardClick(item)}
                 >
-                  <img
-                    src={
-                      item.poster_path
-                        ? `https://image.tmdb.org/t/p/w500${item.poster_path}`
-                        : "/no-image.svg"
-                    }
-                    alt={item.title || item.name}
-                  />
-                  <h3>{item.title || item.name}</h3>
-                  <span>
-                    {
-                      item.release_date?.slice(0, 4) ||
-                      item.first_air_date?.slice(0, 4) ||
-                      ""
-                    }
-                  </span>
-                </div>
+                  <img src={getPoster(item)} alt={getTitle(item)} />
+                  <div className="discover-card-content">
+                    <span className="discover-pill">{normalizeMediaType(item).toUpperCase()}</span>
+                    <h3>{getTitle(item)}</h3>
+                    <p>{getYear(item)} • ⭐ {(item.vote_average || 0).toFixed(1)}</p>
+                  </div>
+                </article>
               ))}
             </div>
           </section>
         ) : (
-          <section className="categories">
-            {Object.entries(categories).map(([key, items]) => (
-              <div key={key} className="category">
-                <h3>
-                  {key === "trending"
-                    ? "Trending Now"
-                    : key.replace(/([A-Z])/g, " $1").replace(/^./, (str) => str.toUpperCase())}
-                </h3>
-                <div className="category-scroll">
-                  {items.map((item: any) => (
-                    <div
-                      key={item.id}
-                      className="category-item"
-                      onClick={() => handleCardClick(item)}
-                    >
-                      <img
-                        src={
-                          item.poster_path
-                            ? `https://image.tmdb.org/t/p/w500${item.poster_path}`
-                            : "/no-image.svg"
-                        }
-                        alt={item.title || item.name}
-                      />
-                      <h4>{item.title || item.name}</h4>
-                    </div>
-                  ))}
-                </div>
+          <>
+            <section className="discover-hero">
+              <div className="discover-hero-copy">
+                <p className="discover-kicker">Stream Smarter</p>
+                <h1>Find movies and shows worth your time.</h1>
+                <p>
+                  Browse trending picks, jump into Live TV, and open details pages with
+                  cleaner controls and faster discovery.
+                </p>
+                <a href="/live-tv" className="discover-live-link">
+                  Explore Live TV
+                </a>
               </div>
-            ))}
-          </section>
+              {heroSpotlight ? (
+                <div className="discover-spotlight" onClick={() => handleCardClick(heroSpotlight)}>
+                  <img
+                    src={
+                      heroSpotlight.backdrop_path
+                        ? `https://image.tmdb.org/t/p/original${heroSpotlight.backdrop_path}`
+                        : getPoster(heroSpotlight)
+                    }
+                    alt={getTitle(heroSpotlight)}
+                  />
+                  <div className="discover-spotlight-overlay">
+                    <span>Spotlight</span>
+                    <h3>{getTitle(heroSpotlight)}</h3>
+                  </div>
+                </div>
+              ) : null}
+            </section>
+
+            <section className="categories">
+              {Object.entries(categories).map(([key, items]) => (
+                <div key={key} className="category discover-category">
+                  <h3>
+                    {key === "trending"
+                      ? "Trending Now"
+                      : key.replace(/([A-Z])/g, " $1").replace(/^./, (str) => str.toUpperCase())}
+                  </h3>
+                  <div className="category-scroll">
+                    {items.slice(0, 18).map((item) => (
+                      <div
+                        key={`${normalizeMediaType(item)}-${item.id}`}
+                        className="category-item"
+                        onClick={() => handleCardClick(item)}
+                      >
+                        <img src={getPoster(item)} alt={getTitle(item)} />
+                        <h4>{getTitle(item)}</h4>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </section>
+          </>
         )}
       </main>
     </div>
