@@ -33,6 +33,15 @@ export type DownloadRequest = {
   imdbId?: string;
 };
 
+export type DownloaderLogger = (
+  step: string,
+  data?: Record<string, unknown>
+) => void;
+
+type FetchVideasyOptions = {
+  logger?: DownloaderLogger;
+};
+
 type WasmApi = {
   serve: () => string;
   verify: (hash: string) => boolean;
@@ -257,28 +266,46 @@ function waitForHash(timeoutMs = 5000): Promise<string> {
 async function decodePayload(
   encrypted: string,
   b35: string,
-  tmdbId: number
+  tmdbId: number,
+  logger?: DownloaderLogger
 ): Promise<DecodeResult> {
+  logger?.("decode:start", {
+    encryptedLength: encrypted.length,
+    tmdbId,
+  });
   const wasm = await getWasmApi();
+  logger?.("decode:wasm-ready");
   (globalThis as any).hash = undefined;
   Function("globalThis", `const window = globalThis; ${wasm.serve()}`)(globalThis);
   const hash = await waitForHash();
-  wasm.verify(hash);
+  logger?.("decode:hash-ready", { hashLength: hash.length });
+  const verifyPassed = wasm.verify(hash);
+  logger?.("decode:hash-verified", { verifyPassed });
 
   const encryptedResult = wasm.decrypt(encrypted, tmdbId);
+  logger?.("decode:decrypted", { decryptedLength: encryptedResult.length });
   const bytes = CryptoJS.AES.decrypt(encryptedResult, b35);
   const originalText = bytes.toString(CryptoJS.enc.Utf8);
   if (!originalText) {
+    logger?.("decode:error", { reason: "empty-utf8-after-aes" });
     throw new Error("AES decrypt returned empty/invalid utf8");
   }
-  return JSON.parse(originalText);
+
+  const parsed = JSON.parse(originalText);
+  const sourcesCount = Array.isArray(parsed?.sources) ? parsed.sources.length : 0;
+  const subtitlesCount = Array.isArray(parsed?.subtitles)
+    ? parsed.subtitles.length
+    : 0;
+  logger?.("decode:json-parsed", { sourcesCount, subtitlesCount });
+  return parsed;
 }
 
 async function tryFetchByEndpoint(
   endpoint: string,
   params: Record<string, string | number | undefined>,
   b35: string,
-  tmdbId: number
+  tmdbId: number,
+  logger?: DownloaderLogger
 ): Promise<DecodeResult> {
   const url = new URL(endpoint);
   Object.entries(params).forEach(([k, v]) => {
@@ -287,13 +314,27 @@ async function tryFetchByEndpoint(
     }
   });
 
+  logger?.("endpoint:request", {
+    endpoint,
+    url: url.toString(),
+  });
+
   const res = await fetch(url.toString());
+  logger?.("endpoint:response", {
+    endpoint,
+    status: res.status,
+    ok: res.ok,
+  });
   if (!res.ok) {
     throw new Error(`${endpoint} -> ${res.status}`);
   }
 
   const encrypted = await res.text();
-  return decodePayload(encrypted, b35, tmdbId);
+  logger?.("endpoint:payload", {
+    endpoint,
+    encryptedLength: encrypted.length,
+  });
+  return decodePayload(encrypted, b35, tmdbId, logger);
 }
 
 async function getIpLocation(): Promise<{
@@ -321,8 +362,33 @@ export function buildDownloadUrl(url: string, filenameBase: string): string {
 export async function fetchVideasyDownloadData(input: DownloadRequest): Promise<{
   sources: SourceItem[];
   subtitles: SubtitleItem[];
+}>;
+export async function fetchVideasyDownloadData(
+  input: DownloadRequest,
+  options: FetchVideasyOptions
+): Promise<{
+  sources: SourceItem[];
+  subtitles: SubtitleItem[];
+}>;
+export async function fetchVideasyDownloadData(
+  input: DownloadRequest,
+  options?: FetchVideasyOptions
+): Promise<{
+  sources: SourceItem[];
+  subtitles: SubtitleItem[];
 }> {
   const b35 = buildB35(input.tmdbId);
+  const logger = options?.logger;
+  logger?.("fetch:start", {
+    tmdbId: input.tmdbId,
+    mediaType: input.mediaType,
+    title: input.title,
+    year: input.year,
+    seasonId: input.seasonId,
+    episodeId: input.episodeId,
+    totalSeasons: input.totalSeasons,
+    hasImdbId: Boolean(input.imdbId),
+  });
   const params: Record<string, string | number | undefined> = {
     title: toMediaTitle(input),
     mediaType: input.mediaType,
@@ -333,6 +399,16 @@ export async function fetchVideasyDownloadData(input: DownloadRequest): Promise<
     tmdbId: input.tmdbId,
     imdbId: input.imdbId || "",
   };
+  logger?.("fetch:params-built", {
+    title: params.title,
+    mediaType: params.mediaType,
+    year: params.year,
+    totalSeasons: params.totalSeasons,
+    episodeId: params.episodeId,
+    seasonId: params.seasonId,
+    tmdbId: params.tmdbId,
+    hasImdbId: Boolean(params.imdbId),
+  });
 
   const endpointFast = "https://api.videasy.net/downloader2/sources-with-title";
   const endpointSlow = "https://api.videasy.net/e3b0c442/sources-with-title";
@@ -340,25 +416,46 @@ export async function fetchVideasyDownloadData(input: DownloadRequest): Promise<
   let decodedFast: DecodeResult | null = null;
   let fastError = "";
   try {
-    decodedFast = await tryFetchByEndpoint(endpointFast, params, b35, input.tmdbId);
+    decodedFast = await tryFetchByEndpoint(
+      endpointFast,
+      params,
+      b35,
+      input.tmdbId,
+      logger
+    );
+    logger?.("fetch:fast-success", {
+      sources: decodedFast.sources?.length || 0,
+      subtitles: decodedFast.subtitles?.length || 0,
+    });
   } catch (error: any) {
     decodedFast = null;
     fastError = String(error?.message || error || "unknown fast endpoint error");
+    logger?.("fetch:fast-error", { error: fastError });
   }
 
   let decodedSlow: DecodeResult | null = null;
   let slowError = "";
   try {
     const loc = await getIpLocation();
+    logger?.("fetch:geo", {
+      hasUserLat: typeof loc.userLat === "number",
+      hasUserLng: typeof loc.userLng === "number",
+    });
     decodedSlow = await tryFetchByEndpoint(
       endpointSlow,
       { ...params, ...loc },
       b35,
-      input.tmdbId
+      input.tmdbId,
+      logger
     );
+    logger?.("fetch:slow-success", {
+      sources: decodedSlow.sources?.length || 0,
+      subtitles: decodedSlow.subtitles?.length || 0,
+    });
   } catch (error: any) {
     decodedSlow = null;
     slowError = String(error?.message || error || "unknown slow endpoint error");
+    logger?.("fetch:slow-error", { error: slowError });
   }
 
   const merged = {
@@ -374,15 +471,24 @@ export async function fetchVideasyDownloadData(input: DownloadRequest): Promise<
     ],
     subtitles: [...(decodedFast?.subtitles || []), ...(decodedSlow?.subtitles || [])],
   };
+  logger?.("fetch:merged", {
+    sources: merged.sources.length,
+    subtitles: merged.subtitles.length,
+  });
 
   if (!merged.sources.length) {
     const details = [
       fastError ? `fast=${fastError}` : "fast=ok-but-empty",
       slowError ? `slow=${slowError}` : "slow=ok-but-empty",
     ].join("; ");
+    logger?.("fetch:error", { reason: "no-sources", details });
     throw new Error(`No sources returned from either endpoint (${details})`);
   }
 
+  logger?.("fetch:done", {
+    sources: merged.sources.length,
+    subtitles: merged.subtitles.length,
+  });
   return merged;
 }
 
