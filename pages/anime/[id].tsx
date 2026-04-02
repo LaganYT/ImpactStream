@@ -41,6 +41,7 @@ export default function AnimeDetailsPage() {
   const [seasonNumber, setSeasonNumber] = useState(1);
   const [episodeNumber, setEpisodeNumber] = useState(1);
   const [episodesCount, setEpisodesCount] = useState(0);
+  const [isProgressLoaded, setIsProgressLoaded] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
   const [downloadSources, setDownloadSources] = useState<SourceItem[]>([]);
@@ -65,40 +66,80 @@ export default function AnimeDetailsPage() {
   }, [id, animeType]);
 
   useEffect(() => {
-    if (!id || animeType !== "tv") return;
+    if (!id || animeType !== "tv") {
+      setIsProgressLoaded(true);
+      return;
+    }
 
-    const fetchSeason = async (season: number) => {
+    const storageId = Array.isArray(id) ? id[0] : id;
+    const storageKey = `continue:anime:tv:${storageId}`;
+
+    try {
+      const stored = window.localStorage.getItem(storageKey);
+      if (!stored) {
+        setIsProgressLoaded(true);
+        return;
+      }
+
+      const parsed = JSON.parse(stored) as { seasonNumber?: number; episodeNumber?: number };
+      const savedSeason = Number(parsed?.seasonNumber);
+      const savedEpisode = Number(parsed?.episodeNumber);
+
+      if (Number.isFinite(savedSeason) && savedSeason > 0) {
+        setSeasonNumber(savedSeason);
+      }
+
+      if (Number.isFinite(savedEpisode) && savedEpisode > 0) {
+        setEpisodeNumber(savedEpisode);
+      }
+    } catch {
+      // Ignore invalid localStorage data.
+    } finally {
+      setIsProgressLoaded(true);
+    }
+  }, [id, animeType]);
+
+  useEffect(() => {
+    if (!id || animeType !== "tv" || !isProgressLoaded) return;
+
+    const fetchSeason = async () => {
       try {
-        const { data } = await axios.get(`https://api.themoviedb.org/3/tv/${id}/season/${season}`, {
+        const { data } = await axios.get(`https://api.themoviedb.org/3/tv/${id}/season/${seasonNumber}`, {
           params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY },
         });
         const count = Array.isArray(data.episodes) ? data.episodes.length : 0;
         setEpisodesCount(count);
-        setEpisodeNumber(count > 0 ? 1 : 0);
+        setEpisodeNumber((current) => {
+          if (count === 0) return 0;
+          if (current > count) return 1;
+          return current > 0 ? current : 1;
+        });
       } catch {
         setEpisodesCount(0);
         setEpisodeNumber(0);
       }
     };
 
-    fetchSeason(1);
-  }, [id, animeType]);
+    fetchSeason();
+  }, [id, animeType, seasonNumber, isProgressLoaded]);
 
-  const handleSeasonChange = async (value: number) => {
-    if (!id) return;
+  useEffect(() => {
+    if (!id || animeType !== "tv" || !isProgressLoaded || seasonNumber <= 0 || episodeNumber <= 0) return;
 
+    const storageId = Array.isArray(id) ? id[0] : id;
+    const storageKey = `continue:anime:tv:${storageId}`;
+    window.localStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        seasonNumber,
+        episodeNumber,
+        updatedAt: new Date().toISOString(),
+      })
+    );
+  }, [id, animeType, seasonNumber, episodeNumber, isProgressLoaded]);
+
+  const handleSeasonChange = (value: number) => {
     setSeasonNumber(value);
-    try {
-      const { data } = await axios.get(`https://api.themoviedb.org/3/tv/${id}/season/${value}`, {
-        params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY },
-      });
-      const count = Array.isArray(data.episodes) ? data.episodes.length : 0;
-      setEpisodesCount(count);
-      setEpisodeNumber(count > 0 ? 1 : 0);
-    } catch {
-      setEpisodesCount(0);
-      setEpisodeNumber(0);
-    }
   };
 
   const title = anime?.title || anime?.name || "Untitled";
