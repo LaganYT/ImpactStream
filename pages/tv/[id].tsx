@@ -28,6 +28,7 @@ export default function TVDetailsPage() {
   const [seasonNumber, setSeasonNumber] = useState(1);
   const [episodeNumber, setEpisodeNumber] = useState(1);
   const [episodesCount, setEpisodesCount] = useState(0);
+  const [resumeSeconds, setResumeSeconds] = useState(0);
   const [isProgressLoaded, setIsProgressLoaded] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
@@ -62,9 +63,14 @@ export default function TVDetailsPage() {
         return;
       }
 
-      const parsed = JSON.parse(stored) as { seasonNumber?: number; episodeNumber?: number };
+      const parsed = JSON.parse(stored) as {
+        seasonNumber?: number;
+        episodeNumber?: number;
+        timestamp?: number;
+      };
       const savedSeason = Number(parsed?.seasonNumber);
       const savedEpisode = Number(parsed?.episodeNumber);
+      const savedTimestamp = Math.floor(Number(parsed?.timestamp || 0));
 
       if (Number.isFinite(savedSeason) && savedSeason > 0) {
         setSeasonNumber(savedSeason);
@@ -73,6 +79,8 @@ export default function TVDetailsPage() {
       if (Number.isFinite(savedEpisode) && savedEpisode > 0) {
         setEpisodeNumber(savedEpisode);
       }
+
+      setResumeSeconds(savedTimestamp > 0 ? savedTimestamp : 0);
     } catch {
       // Ignore invalid localStorage data.
     } finally {
@@ -114,10 +122,89 @@ export default function TVDetailsPage() {
       JSON.stringify({
         seasonNumber,
         episodeNumber,
+        timestamp: 0,
         updatedAt: new Date().toISOString(),
       })
     );
   }, [id, seasonNumber, episodeNumber, isProgressLoaded]);
+
+  useEffect(() => {
+    if (!id || !isProgressLoaded || seasonNumber <= 0 || episodeNumber <= 0) return;
+
+    const storageId = Array.isArray(id) ? id[0] : id;
+    const storageKey = `continue:tv:${storageId}`;
+
+    const handleProgressMessage = (event: MessageEvent) => {
+      if (event.origin !== "https://player.videasy.net") return;
+
+      const payload =
+        typeof event.data === "string"
+          ? (() => {
+              try {
+                return JSON.parse(event.data);
+              } catch {
+                return null;
+              }
+            })()
+          : event.data;
+
+      if (!payload || payload.type !== "tv") return;
+      if (String(payload.id) !== storageId) return;
+
+      const payloadSeason = Number(payload.season);
+      const payloadEpisode = Number(payload.episode);
+      if (payloadSeason !== seasonNumber || payloadEpisode !== episodeNumber) return;
+
+      const timestamp = Math.max(0, Math.floor(Number(payload.timestamp || 0)));
+      const duration = Math.max(0, Math.floor(Number(payload.duration || 0)));
+      const progress = Math.max(0, Math.min(100, Number(payload.progress || 0)));
+
+      window.localStorage.setItem(
+        storageKey,
+        JSON.stringify({
+          seasonNumber,
+          episodeNumber,
+          timestamp,
+          duration,
+          progress,
+          updatedAt: new Date().toISOString(),
+        })
+      );
+    };
+
+    window.addEventListener("message", handleProgressMessage);
+    return () => window.removeEventListener("message", handleProgressMessage);
+  }, [id, isProgressLoaded, seasonNumber, episodeNumber]);
+
+  useEffect(() => {
+    if (!id || !isProgressLoaded || seasonNumber <= 0 || episodeNumber <= 0) return;
+
+    const storageId = Array.isArray(id) ? id[0] : id;
+    const storageKey = `continue:tv:${storageId}`;
+
+    try {
+      const stored = window.localStorage.getItem(storageKey);
+      if (!stored) {
+        setResumeSeconds(0);
+        return;
+      }
+
+      const parsed = JSON.parse(stored) as {
+        seasonNumber?: number;
+        episodeNumber?: number;
+        timestamp?: number;
+      };
+      if (Number(parsed.seasonNumber) !== seasonNumber || Number(parsed.episodeNumber) !== episodeNumber) {
+        setResumeSeconds(0);
+        return;
+      }
+
+      const savedTimestamp = Math.floor(Number(parsed.timestamp || 0));
+      setResumeSeconds(savedTimestamp > 0 ? savedTimestamp : 0);
+    } catch {
+      setResumeSeconds(0);
+    }
+  }, [id, isProgressLoaded, seasonNumber, episodeNumber]);
 
   const handleSeasonChange = (value: number) => {
     setSeasonNumber(value);
@@ -148,6 +235,17 @@ export default function TVDetailsPage() {
   );
 
   if (!tvShow) return <div className="loading">Loading...</div>;
+  const tvId = Array.isArray(id) ? id[0] : id;
+  const tvQuery = new URLSearchParams({
+    color: "e50914",
+    nextEpisode: "true",
+    episodeSelector: "true",
+    autoplayNextEpisode: "true",
+    overlay: "true",
+  });
+  if (resumeSeconds > 0) {
+    tvQuery.set("progress", String(resumeSeconds));
+  }
 
   const handleDownload = async () => {
     const tmdbId = Number(Array.isArray(id) ? id[0] : id);
@@ -189,7 +287,7 @@ export default function TVDetailsPage() {
         mediaLabel="Series"
         title={title}
         summary={tvShow.overview || "No overview is available for this series yet."}
-        embedUrl={`https://player.videasy.net/tv/${id}/${seasonNumber}/${episodeNumber}?color=e50914&nextEpisode=true&episodeSelector=true&autoplayNextEpisode=true`}
+        embedUrl={`https://player.videasy.net/tv/${tvId}/${seasonNumber}/${episodeNumber}?${tvQuery.toString()}`}
         posterUrl={posterUrl}
         backdropUrl={backdropUrl}
         metadata={metadata}

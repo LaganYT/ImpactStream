@@ -41,6 +41,7 @@ export default function AnimeDetailsPage() {
   const [seasonNumber, setSeasonNumber] = useState(1);
   const [episodeNumber, setEpisodeNumber] = useState(1);
   const [episodesCount, setEpisodesCount] = useState(0);
+  const [resumeSeconds, setResumeSeconds] = useState(0);
   const [isProgressLoaded, setIsProgressLoaded] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
@@ -81,9 +82,14 @@ export default function AnimeDetailsPage() {
         return;
       }
 
-      const parsed = JSON.parse(stored) as { seasonNumber?: number; episodeNumber?: number };
+      const parsed = JSON.parse(stored) as {
+        seasonNumber?: number;
+        episodeNumber?: number;
+        timestamp?: number;
+      };
       const savedSeason = Number(parsed?.seasonNumber);
       const savedEpisode = Number(parsed?.episodeNumber);
+      const savedTimestamp = Math.floor(Number(parsed?.timestamp || 0));
 
       if (Number.isFinite(savedSeason) && savedSeason > 0) {
         setSeasonNumber(savedSeason);
@@ -92,6 +98,8 @@ export default function AnimeDetailsPage() {
       if (Number.isFinite(savedEpisode) && savedEpisode > 0) {
         setEpisodeNumber(savedEpisode);
       }
+
+      setResumeSeconds(savedTimestamp > 0 ? savedTimestamp : 0);
     } catch {
       // Ignore invalid localStorage data.
     } finally {
@@ -133,10 +141,92 @@ export default function AnimeDetailsPage() {
       JSON.stringify({
         seasonNumber,
         episodeNumber,
+        timestamp: 0,
         updatedAt: new Date().toISOString(),
       })
     );
   }, [id, animeType, seasonNumber, episodeNumber, isProgressLoaded]);
+
+  useEffect(() => {
+    if (!id || !isProgressLoaded) return;
+
+    const storageId = Array.isArray(id) ? id[0] : id;
+    const storageKey = `continue:anime:${animeType}:${storageId}`;
+
+    const handleProgressMessage = (event: MessageEvent) => {
+      if (event.origin !== "https://player.videasy.net") return;
+
+      const payload =
+        typeof event.data === "string"
+          ? (() => {
+              try {
+                return JSON.parse(event.data);
+              } catch {
+                return null;
+              }
+            })()
+          : event.data;
+
+      if (!payload || payload.type !== animeType) return;
+      if (String(payload.id) !== storageId) return;
+
+      const payloadSeason = Number(payload.season);
+      const payloadEpisode = Number(payload.episode);
+      if (animeType === "tv" && (payloadSeason !== seasonNumber || payloadEpisode !== episodeNumber)) return;
+
+      const timestamp = Math.max(0, Math.floor(Number(payload.timestamp || 0)));
+      const duration = Math.max(0, Math.floor(Number(payload.duration || 0)));
+      const progress = Math.max(0, Math.min(100, Number(payload.progress || 0)));
+
+      window.localStorage.setItem(
+        storageKey,
+        JSON.stringify({
+          seasonNumber: animeType === "tv" ? seasonNumber : 1,
+          episodeNumber: animeType === "tv" ? episodeNumber : 1,
+          timestamp,
+          duration,
+          progress,
+          updatedAt: new Date().toISOString(),
+        })
+      );
+    };
+
+    window.addEventListener("message", handleProgressMessage);
+    return () => window.removeEventListener("message", handleProgressMessage);
+  }, [id, animeType, isProgressLoaded, seasonNumber, episodeNumber]);
+
+  useEffect(() => {
+    if (!id || !isProgressLoaded) return;
+
+    const storageId = Array.isArray(id) ? id[0] : id;
+    const storageKey = `continue:anime:${animeType}:${storageId}`;
+
+    try {
+      const stored = window.localStorage.getItem(storageKey);
+      if (!stored) {
+        setResumeSeconds(0);
+        return;
+      }
+
+      const parsed = JSON.parse(stored) as {
+        seasonNumber?: number;
+        episodeNumber?: number;
+        timestamp?: number;
+      };
+      if (
+        animeType === "tv" &&
+        (Number(parsed.seasonNumber) !== seasonNumber || Number(parsed.episodeNumber) !== episodeNumber)
+      ) {
+        setResumeSeconds(0);
+        return;
+      }
+
+      const savedTimestamp = Math.floor(Number(parsed.timestamp || 0));
+      setResumeSeconds(savedTimestamp > 0 ? savedTimestamp : 0);
+    } catch {
+      setResumeSeconds(0);
+    }
+  }, [id, animeType, isProgressLoaded, seasonNumber, episodeNumber]);
 
   const handleSeasonChange = (value: number) => {
     setSeasonNumber(value);
@@ -154,12 +244,33 @@ export default function AnimeDetailsPage() {
 
   const streamUrl = useMemo(() => {
     if (!id) return "";
+    const mediaId = Array.isArray(id) ? id[0] : id;
+
     if (animeType === "movie") {
-      return `https://player.videasy.net/movie/${id}?color=e50914&nextEpisode=true&episodeSelector=true`;
+      const query = new URLSearchParams({
+        color: "e50914",
+        nextEpisode: "true",
+        episodeSelector: "true",
+        overlay: "true",
+      });
+      if (resumeSeconds > 0) {
+        query.set("progress", String(resumeSeconds));
+      }
+      return `https://player.videasy.net/movie/${mediaId}?${query.toString()}`;
     }
 
-    return `https://player.videasy.net/tv/${id}/${seasonNumber}/${episodeNumber}?color=e50914&nextEpisode=true&episodeSelector=true&autoplayNextEpisode=true`;
-  }, [id, animeType, seasonNumber, episodeNumber]);
+    const query = new URLSearchParams({
+      color: "e50914",
+      nextEpisode: "true",
+      episodeSelector: "true",
+      autoplayNextEpisode: "true",
+      overlay: "true",
+    });
+    if (resumeSeconds > 0) {
+      query.set("progress", String(resumeSeconds));
+    }
+    return `https://player.videasy.net/tv/${mediaId}/${seasonNumber}/${episodeNumber}?${query.toString()}`;
+  }, [id, animeType, seasonNumber, episodeNumber, resumeSeconds]);
 
   const metadata = useMemo(() => {
     const base = [
