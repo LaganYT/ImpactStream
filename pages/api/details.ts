@@ -48,7 +48,28 @@ async function resolvePrimaryVideasySource(input: {
   explicitSeasonRequested: boolean;
   explicitEpisodeRequested: boolean;
 }): Promise<ResolvedSource | null> {
+  console.log("[details] resolvePrimaryVideasySource:start", {
+    tmdbId: input.tmdbId,
+    tmdbType: input.tmdbType,
+    title: input.title,
+    releaseYear: input.releaseYear,
+    totalSeasons: input.totalSeasons,
+    imdbId: input.imdbId,
+    preferredSeasonId: input.preferredSeasonId,
+    preferredEpisodeId: input.preferredEpisodeId,
+    explicitSeasonRequested: input.explicitSeasonRequested,
+    explicitEpisodeRequested: input.explicitEpisodeRequested,
+  });
+
   if (input.tmdbType === "movie") {
+    console.log("[details] videasy probe:movie", {
+      tmdbId: input.tmdbId,
+      mediaType: "movie",
+      title: input.title,
+      year: input.releaseYear,
+      imdbId: input.imdbId,
+    });
+
     const decoded = await fetchVideasyDownloadData({
       tmdbId: input.tmdbId,
       mediaType: "movie",
@@ -57,13 +78,25 @@ async function resolvePrimaryVideasySource(input: {
       imdbId: input.imdbId,
     });
 
+    console.log("[details] videasy result:movie", {
+      sourceCount: decoded.sources.length,
+      sources: decoded.sources.map((source) => ({
+        url: source.url,
+      })),
+    });
+
     const primary = decoded.sources.find((source) => Boolean(source.url));
     return primary?.url ? { url: primary.url } : null;
   }
 
   const seasonCandidates = input.explicitSeasonRequested
     ? [input.preferredSeasonId || 1]
-    : Array.from({ length: Math.max(1, Math.min(input.totalSeasons || 1, 4)) }, (_, i) => i + 1);
+    : Array.from(
+        { length: Math.max(1, Math.min(input.totalSeasons || 1, 4)) },
+        (_, i) => i + 1
+      );
+
+  console.log("[details] tv season candidates", { seasonCandidates });
 
   for (const season of seasonCandidates) {
     let episodeCandidates = input.explicitEpisodeRequested
@@ -71,26 +104,62 @@ async function resolvePrimaryVideasySource(input: {
       : [1, 2, 3];
 
     if (!input.explicitEpisodeRequested) {
+      const tmdbSeasonEndpoint = `/tv/${input.tmdbId}/season/${season}`;
+
       try {
+        console.log("[details] tmdb season probe:start", {
+          endpoint: tmdbSeasonEndpoint,
+          season,
+        });
+
         const seasonPayload = await tmdbGet<TmdbSeasonPayload>(
-          `/tv/${input.tmdbId}/season/${season}`
+          tmdbSeasonEndpoint
         );
+
         const episodeCount = Array.isArray(seasonPayload.episodes)
           ? seasonPayload.episodes.length
           : 0;
+
+        console.log("[details] tmdb season probe:success", {
+          endpoint: tmdbSeasonEndpoint,
+          season,
+          episodeCount,
+        });
+
         if (episodeCount > 0) {
           episodeCandidates = Array.from(
             { length: Math.min(episodeCount, 8) },
             (_, i) => i + 1
           );
         }
-      } catch {
+      } catch (error: any) {
+        console.error("[details] tmdb season probe:error", {
+          endpoint: tmdbSeasonEndpoint,
+          season,
+          message: error?.message || String(error),
+        });
         // Keep default candidates when season details are unavailable.
       }
     }
 
+    console.log("[details] tv episode candidates", {
+      season,
+      episodeCandidates,
+    });
+
     for (const episode of episodeCandidates) {
       try {
+        console.log("[details] videasy probe:tv:start", {
+          tmdbId: input.tmdbId,
+          mediaType: "tv",
+          title: input.title,
+          year: input.releaseYear,
+          seasonId: season,
+          episodeId: episode,
+          totalSeasons: input.totalSeasons,
+          imdbId: input.imdbId,
+        });
+
         const decoded = await fetchVideasyDownloadData({
           tmdbId: input.tmdbId,
           mediaType: "tv",
@@ -102,19 +171,44 @@ async function resolvePrimaryVideasySource(input: {
           imdbId: input.imdbId,
         });
 
+        console.log("[details] videasy probe:tv:result", {
+          seasonId: season,
+          episodeId: episode,
+          sourceCount: decoded.sources.length,
+          sources: decoded.sources.map((source) => ({
+            url: source.url,
+          })),
+        });
+
         const primary = decoded.sources.find((source) => Boolean(source.url));
         if (primary?.url) {
+          console.log("[details] videasy probe:tv:success", {
+            seasonId: season,
+            episodeId: episode,
+            url: primary.url,
+          });
+
           return {
             url: primary.url,
             seasonId: season,
             episodeId: episode,
           };
         }
-      } catch {
+      } catch (error: any) {
+        console.error("[details] videasy probe:tv:error", {
+          seasonId: season,
+          episodeId: episode,
+          message: error?.message || String(error),
+        });
         // Continue probing other episodes/seasons.
       }
     }
   }
+
+  console.warn("[details] resolvePrimaryVideasySource:no-source-found", {
+    tmdbId: input.tmdbId,
+    tmdbType: input.tmdbType,
+  });
 
   return null;
 }
