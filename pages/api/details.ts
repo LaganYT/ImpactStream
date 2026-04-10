@@ -63,16 +63,34 @@ export default async function handler(
       return res.status(404).json({ error: "Title not found." });
     }
 
+    const imdbId = payload.imdb_id || payload.external_ids?.imdb_id || null;
+    const totalSeasons =
+      tmdbType === "tv" ? Number(payload.number_of_seasons || 0) : undefined;
+
     return res.status(200).json({
       ...detail,
-      imdbId: payload.imdb_id || payload.external_ids?.imdb_id || null,
-      totalSeasons: tmdbType === "tv" ? Number(payload.number_of_seasons || 0) : undefined,
+      imdbId,
+      totalSeasons,
       playbackAvailable: false,
       downloadAvailable: false,
       authorizedPlaybackUrl: null,
       authorizedDownloadUrl: null,
       availabilityNote:
-        "Playback and download availability are resolved in the browser after detail metadata loads.",
+        "Sources are not resolved by /api/details. Resolve them on the client by calling fetchVideasyDownloadData(...) with sourceResolutionInput.request.",
+      sourceResolutionInput: {
+        required: true,
+        strategy: "client",
+        request: {
+          tmdbId: Number(id),
+          mediaType: tmdbType,
+          title: payload.title || payload.name || detail.title,
+          year: detail.releaseYear || undefined,
+          seasonId: tmdbType === "tv" ? 1 : undefined,
+          episodeId: tmdbType === "tv" ? 1 : undefined,
+          totalSeasons,
+          imdbId: imdbId || undefined,
+        },
+      },
     });
   } catch (error: any) {
     return res.status(500).json({
