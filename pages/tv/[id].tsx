@@ -1,24 +1,24 @@
 import { useRouter } from "next/router";
 import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
-import { SourceItem, SubtitleItem } from "../../utils/videasyDownloader";
+import {
+  fetchVideasyDownloadData,
+  SourceItem,
+  SubtitleItem,
+} from "../../utils/videasyDownloader";
 import MediaDetailShell from "../../components/MediaDetailShell";
 import DownloadModal from "../../components/DownloadModal";
-import { useVideasySourceResolution } from "../../hooks/useVideasySourceResolution";
 
 type TVDetails = {
-  id: string;
-  title: string;
-  overview: string;
-  posterUrl: string | null;
-  backdropUrl: string | null;
-  rating: number | null;
-  releaseDate: string | null;
-  seasonsLabel?: string;
-  genres: string[];
-  releaseYear: string;
-  totalSeasons?: number;
-  imdbId?: string | null;
+  name?: string;
+  overview?: string;
+  poster_path?: string;
+  backdrop_path?: string;
+  vote_average?: number;
+  first_air_date?: string;
+  number_of_seasons?: number;
+  number_of_episodes?: number;
+  genres?: { id: number; name: string }[];
 };
 
 export default function TVDetailsPage() {
@@ -30,6 +30,7 @@ export default function TVDetailsPage() {
   const [episodesCount, setEpisodesCount] = useState(0);
   const [resumeSeconds, setResumeSeconds] = useState(0);
   const [isProgressLoaded, setIsProgressLoaded] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
   const [downloadSources, setDownloadSources] = useState<SourceItem[]>([]);
   const [downloadSubtitles, setDownloadSubtitles] = useState<SubtitleItem[]>([]);
@@ -40,8 +41,8 @@ export default function TVDetailsPage() {
     if (!id) return;
 
     const fetchTVShow = async () => {
-      const { data } = await axios.get("/api/details", {
-        params: { id, tmdbType: "tv", category: "tv" },
+      const { data } = await axios.get(`https://api.themoviedb.org/3/tv/${id}`, {
+        params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY },
       });
       setTVShow(data);
     };
@@ -205,44 +206,33 @@ export default function TVDetailsPage() {
     }
   }, [id, isProgressLoaded, seasonNumber, episodeNumber]);
 
-  const tmdbId = Number(Array.isArray(id) ? id[0] : id);
-  const sourceResolution = useVideasySourceResolution({
-    enabled: Boolean(tvShow && tmdbId && seasonNumber > 0 && episodeNumber > 0),
-    request:
-      tvShow && tmdbId && seasonNumber > 0 && episodeNumber > 0
-        ? {
-            tmdbId,
-            mediaType: "tv",
-            title: tvShow.title,
-            year: tvShow.releaseYear,
-            seasonId: seasonNumber,
-            episodeId: episodeNumber,
-            totalSeasons: Number(tvShow.totalSeasons || 0),
-            imdbId: tvShow.imdbId || undefined,
-          }
-        : null,
-  });
-
   const handleSeasonChange = (value: number) => {
     setSeasonNumber(value);
   };
 
-  const title = tvShow?.title || "Untitled";
-  const releaseDate = tvShow?.releaseDate || "Unknown";
-  const posterUrl = tvShow?.posterUrl || "/no-image.svg";
-  const backdropUrl = tvShow?.backdropUrl || undefined;
+  const title = tvShow?.name || "Untitled";
+  const releaseDate = tvShow?.first_air_date || "Unknown";
+  const posterUrl = tvShow?.poster_path
+    ? `https://image.tmdb.org/t/p/w500${tvShow.poster_path}`
+    : "/no-image.svg";
+  const backdropUrl = tvShow?.backdrop_path
+    ? `https://image.tmdb.org/t/p/original${tvShow.backdrop_path}`
+    : undefined;
 
   const metadata = useMemo(
     () => [
       { label: "First Air", value: releaseDate },
-      { label: "Rating", value: typeof tvShow?.rating === "number" ? tvShow.rating.toFixed(1) : "N/A" },
-      { label: "Episodes", value: episodesCount > 0 ? String(episodesCount) : "N/A" },
-      { label: "Seasons", value: tvShow?.seasonsLabel ? tvShow.seasonsLabel.split(" ")[0] : "N/A" },
+      { label: "Rating", value: tvShow?.vote_average ? tvShow.vote_average.toFixed(1) : "N/A" },
+      { label: "Episodes", value: tvShow?.number_of_episodes ? String(tvShow.number_of_episodes) : "N/A" },
+      { label: "Seasons", value: tvShow?.number_of_seasons ? String(tvShow.number_of_seasons) : "N/A" },
     ],
-    [releaseDate, tvShow?.rating, tvShow?.seasonsLabel, episodesCount]
+    [releaseDate, tvShow?.number_of_episodes, tvShow?.number_of_seasons, tvShow?.vote_average]
   );
 
-  const tags = useMemo(() => tvShow?.genres || [], [tvShow?.genres]);
+  const tags = useMemo(
+    () => (tvShow?.genres || []).slice(0, 6).map((genre) => genre.name),
+    [tvShow?.genres]
+  );
 
   if (!tvShow) return <div className="loading">Loading...</div>;
   const tvId = Array.isArray(id) ? id[0] : id;
@@ -258,25 +248,37 @@ export default function TVDetailsPage() {
   }
 
   const handleDownload = async () => {
-    setDownloadError("");
+    const tmdbId = Number(Array.isArray(id) ? id[0] : id);
+    if (!tmdbId) return;
 
-    if (!sourceResolution.resolvedSources.length) {
-      setDownloadError(sourceResolution.availabilityNote || "No download sources are available yet.");
-      setDownloadSources([]);
-      setDownloadSubtitles([]);
-      setDownloadTitle(title);
+    try {
+      setIsDownloading(true);
+      setDownloadError("");
+
+      const decoded = await fetchVideasyDownloadData({
+        tmdbId,
+        mediaType: "tv",
+        title,
+        year: (tvShow.first_air_date || "").slice(0, 4),
+        seasonId: seasonNumber,
+        episodeId: episodeNumber,
+        totalSeasons: Number(tvShow.number_of_seasons || 0),
+      });
+
+      setDownloadSources(decoded.sources || []);
+      setDownloadSubtitles(decoded.subtitles || []);
+      setDownloadTitle(
+        `${title} | S${seasonNumber}E${episodeNumber}${
+          tvShow.first_air_date ? ` - [${String(tvShow.first_air_date).slice(0, 4)}]` : ""
+        }`
+      );
       setIsDownloadModalOpen(true);
-      return;
+    } catch (error: any) {
+      setDownloadError(error?.message || "Unable to load download sources.");
+      setIsDownloadModalOpen(true);
+    } finally {
+      setIsDownloading(false);
     }
-
-    setDownloadSources(sourceResolution.resolvedSources);
-    setDownloadSubtitles(sourceResolution.resolvedSubtitles);
-    setDownloadTitle(
-      `${title} | S${seasonNumber}E${episodeNumber}${
-        tvShow.releaseYear ? ` - [${tvShow.releaseYear}]` : ""
-      }`
-    );
-    setIsDownloadModalOpen(true);
   };
 
   return (
@@ -290,15 +292,12 @@ export default function TVDetailsPage() {
         backdropUrl={backdropUrl}
         metadata={metadata}
         tags={tags}
-        infoNote={`${sourceResolution.loadingSources ? "Resolving sources... " : ""}${
-          sourceResolution.availabilityNote
-        }`}
         controls={
           <>
             <label className="detail-select-field">
               <span>Season</span>
               <select value={seasonNumber} onChange={(e) => handleSeasonChange(Number(e.target.value))}>
-                {Array.from({ length: tvShow.totalSeasons || 0 }, (_, i) => i + 1).map((season) => (
+                {Array.from({ length: tvShow.number_of_seasons || 0 }, (_, i) => i + 1).map((season) => (
                   <option key={season} value={season}>
                     Season {season}
                   </option>
@@ -321,12 +320,8 @@ export default function TVDetailsPage() {
               </select>
             </label>
 
-            <button onClick={handleDownload} disabled={sourceResolution.loadingSources || !sourceResolution.downloadAvailable}>
-              {sourceResolution.loadingSources
-                ? "Resolving..."
-                : sourceResolution.downloadAvailable
-                  ? "Download"
-                  : "Unavailable"}
+            <button onClick={handleDownload} disabled={isDownloading}>
+              {isDownloading ? "Decoding..." : "Download"}
             </button>
           </>
         }

@@ -1,24 +1,24 @@
 import { useRouter } from "next/router";
 import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
-import { SourceItem, SubtitleItem } from "../../utils/videasyDownloader";
+import {
+  fetchVideasyDownloadData,
+  SourceItem,
+  SubtitleItem,
+} from "../../utils/videasyDownloader";
 import MediaDetailShell from "../../components/MediaDetailShell";
 import DownloadModal from "../../components/DownloadModal";
-import { useVideasySourceResolution } from "../../hooks/useVideasySourceResolution";
 
 type MovieDetails = {
-  id: string;
-  title: string;
-  overview: string;
-  posterUrl: string | null;
-  backdropUrl: string | null;
-  releaseDate: string | null;
-  releaseYear: string;
-  rating: number | null;
-  runtimeLabel: string;
-  genres: string[];
-  availabilityNote: string;
-  imdbId?: string | null;
+  title?: string;
+  overview?: string;
+  poster_path?: string;
+  backdrop_path?: string;
+  vote_average?: number;
+  release_date?: string;
+  runtime?: number;
+  genres?: { id: number; name: string }[];
+  imdb_id?: string;
 };
 
 export default function MovieDetailsPage() {
@@ -26,6 +26,7 @@ export default function MovieDetailsPage() {
   const { id } = router.query;
   const [movie, setMovie] = useState<MovieDetails | null>(null);
   const [resumeSeconds, setResumeSeconds] = useState(0);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
   const [downloadSources, setDownloadSources] = useState<SourceItem[]>([]);
   const [downloadSubtitles, setDownloadSubtitles] = useState<SubtitleItem[]>([]);
@@ -96,11 +97,9 @@ export default function MovieDetailsPage() {
     if (!id) return;
 
     const fetchDetails = async () => {
-      const { data } = await axios.get("/api/details", {
+      const { data } = await axios.get(`https://api.themoviedb.org/3/movie/${id}`, {
         params: {
-          id,
-          tmdbType: "movie",
-          category: "movie",
+          api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY,
         },
       });
       setMovie(data);
@@ -109,36 +108,28 @@ export default function MovieDetailsPage() {
     fetchDetails();
   }, [id]);
 
-  const tmdbId = Number(Array.isArray(id) ? id[0] : id);
-  const sourceResolution = useVideasySourceResolution({
-    enabled: Boolean(movie && tmdbId),
-    request:
-      movie && tmdbId
-        ? {
-            tmdbId,
-            mediaType: "movie",
-            title: movie.title,
-            year: movie.releaseYear,
-            imdbId: movie.imdbId || undefined,
-          }
-        : null,
-  });
-
   const title = movie?.title || "Untitled";
-  const releaseDate = movie?.releaseDate || "Unknown";
-  const posterUrl = movie?.posterUrl || "/no-image.svg";
-  const backdropUrl = movie?.backdropUrl || undefined;
+  const releaseDate = movie?.release_date || "Unknown";
+  const posterUrl = movie?.poster_path
+    ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
+    : "/no-image.svg";
+  const backdropUrl = movie?.backdrop_path
+    ? `https://image.tmdb.org/t/p/original${movie.backdrop_path}`
+    : undefined;
 
   const metadata = useMemo(
     () => [
       { label: "Release", value: releaseDate },
-      { label: "Rating", value: typeof movie?.rating === "number" ? movie.rating.toFixed(1) : "N/A" },
-      { label: "Runtime", value: movie?.runtimeLabel || "Unknown" },
+      { label: "Rating", value: movie?.vote_average ? movie.vote_average.toFixed(1) : "N/A" },
+      { label: "Runtime", value: movie?.runtime ? `${movie.runtime} min` : "Unknown" },
     ],
-    [movie?.rating, movie?.runtimeLabel, releaseDate]
+    [movie?.runtime, movie?.vote_average, releaseDate]
   );
 
-  const tags = useMemo(() => movie?.genres || [], [movie?.genres]);
+  const tags = useMemo(
+    () => (movie?.genres || []).slice(0, 6).map((genre) => genre.name),
+    [movie?.genres]
+  );
 
   if (!movie) return <div className="loading">Loading...</div>;
 
@@ -154,21 +145,32 @@ export default function MovieDetailsPage() {
   }
 
   const handleDownload = async () => {
-    setDownloadError("");
+    const tmdbId = Number(Array.isArray(id) ? id[0] : id);
+    if (!tmdbId) return;
 
-    if (!sourceResolution.resolvedSources.length) {
-      setDownloadError(sourceResolution.availabilityNote || "No download sources are available yet.");
-      setDownloadSources([]);
-      setDownloadSubtitles([]);
-      setDownloadTitle(title);
+    try {
+      setIsDownloading(true);
+      setDownloadError("");
+
+      const year = (movie.release_date || "").slice(0, 4);
+      const decoded = await fetchVideasyDownloadData({
+        tmdbId,
+        mediaType: "movie",
+        title,
+        year,
+        imdbId: movie.imdb_id || "",
+      });
+
+      setDownloadSources(decoded.sources || []);
+      setDownloadSubtitles(decoded.subtitles || []);
+      setDownloadTitle(`${title}${year ? ` - [${year}]` : ""}`);
       setIsDownloadModalOpen(true);
-      return;
+    } catch (error: any) {
+      setDownloadError(error?.message || "Unable to load download sources.");
+      setIsDownloadModalOpen(true);
+    } finally {
+      setIsDownloading(false);
     }
-
-    setDownloadSources(sourceResolution.resolvedSources);
-    setDownloadSubtitles(sourceResolution.resolvedSubtitles);
-    setDownloadTitle(`${title}${movie.releaseYear ? ` - [${movie.releaseYear}]` : ""}`);
-    setIsDownloadModalOpen(true);
   };
 
   return (
@@ -182,19 +184,9 @@ export default function MovieDetailsPage() {
         backdropUrl={backdropUrl}
         metadata={metadata}
         tags={tags}
-        infoNote={`${sourceResolution.loadingSources ? "Resolving sources... " : ""}${
-          sourceResolution.availabilityNote || movie.availabilityNote
-        }`}
         actions={
-          <button
-            onClick={handleDownload}
-            disabled={sourceResolution.loadingSources || !sourceResolution.downloadAvailable}
-          >
-            {sourceResolution.loadingSources
-              ? "Resolving..."
-              : sourceResolution.downloadAvailable
-                ? "Download"
-                : "Unavailable"}
+          <button onClick={handleDownload} disabled={isDownloading}>
+            {isDownloading ? "Decoding..." : "Download"}
           </button>
         }
       />
