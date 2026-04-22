@@ -11,6 +11,8 @@ export type ContinueWatchingProgress = {
   duration: number;
   progress: number;
   updatedAt: string;
+  cachedTitle?: string;
+  cachedPosterPath?: string;
 };
 
 export type ContinueWatchingItem = ContinueWatchingProgress & {
@@ -64,6 +66,8 @@ export const readContinueWatchingProgress = (): ContinueWatchingProgress[] => {
       const seasonNumber = Math.max(1, Math.floor(toValidNumber(parsed.seasonNumber, 1)));
       const episodeNumber = Math.max(1, Math.floor(toValidNumber(parsed.episodeNumber, 1)));
       const updatedAt = String(parsed.updatedAt || "");
+      const cachedTitle = String(parsed.title || "");
+      const cachedPosterPath = String(parsed.posterPath || "");
 
       if (timestamp <= 0 && progress <= 0) continue;
 
@@ -76,6 +80,8 @@ export const readContinueWatchingProgress = (): ContinueWatchingProgress[] => {
         duration,
         progress,
         updatedAt,
+        cachedTitle,
+        cachedPosterPath,
       });
     } catch {
       // Ignore invalid entries.
@@ -98,10 +104,18 @@ export const hydrateContinueWatchingItems = async (
   entries: ContinueWatchingProgress[]
 ): Promise<ContinueWatchingItem[]> => {
   const apiKey = process.env.NEXT_PUBLIC_TMDB_API_KEY;
-  if (!apiKey || entries.length === 0) return [];
+  if (entries.length === 0) return [];
 
   const hydrated = await Promise.all(
     entries.map(async (entry) => {
+      if (!apiKey) {
+        return {
+          ...entry,
+          title: entry.cachedTitle || "Untitled",
+          posterPath: entry.cachedPosterPath,
+        } as ContinueWatchingItem;
+      }
+
       try {
         const { data } = await axios.get(detailsEndpoint(entry.kind, entry.id), {
           params: { api_key: apiKey },
@@ -117,7 +131,8 @@ export const hydrateContinueWatchingItems = async (
       } catch {
         return {
           ...entry,
-          title: "Untitled",
+          title: entry.cachedTitle || "Untitled",
+          posterPath: entry.cachedPosterPath,
         } as ContinueWatchingItem;
       }
     })

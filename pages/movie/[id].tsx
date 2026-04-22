@@ -58,7 +58,7 @@ export default function MovieDetailsPage() {
     const storageKey = `continue:movie:${storageId}`;
 
     const handleProgressMessage = (event: MessageEvent) => {
-      if (event.origin !== "https://player.videasy.net") return;
+      if (!event.origin.includes("videasy")) return;
 
       const payload =
         typeof event.data === "string"
@@ -71,7 +71,8 @@ export default function MovieDetailsPage() {
             })()
           : event.data;
 
-      if (!payload || payload.type !== "movie") return;
+      const payloadType = String(payload?.type || payload?.mediaType || "");
+      if (!payload || payloadType !== "movie") return;
       if (String(payload.id) !== storageId) return;
 
       const timestamp = Math.max(0, Math.floor(Number(payload.timestamp || 0)));
@@ -81,6 +82,9 @@ export default function MovieDetailsPage() {
       window.localStorage.setItem(
         storageKey,
         JSON.stringify({
+          title: movie?.title || "Untitled",
+          posterPath: movie?.poster_path || "",
+          mediaType: "movie",
           timestamp,
           duration,
           progress,
@@ -91,7 +95,7 @@ export default function MovieDetailsPage() {
 
     window.addEventListener("message", handleProgressMessage);
     return () => window.removeEventListener("message", handleProgressMessage);
-  }, [id]);
+  }, [id, movie?.poster_path, movie?.title]);
 
   useEffect(() => {
     if (!id) return;

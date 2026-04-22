@@ -120,13 +120,16 @@ export default function TVDetailsPage() {
     window.localStorage.setItem(
       storageKey,
       JSON.stringify({
+        title: tvShow?.name || "Untitled",
+        posterPath: tvShow?.poster_path || "",
+        mediaType: "tv",
         seasonNumber,
         episodeNumber,
         timestamp: 0,
         updatedAt: new Date().toISOString(),
       })
     );
-  }, [id, seasonNumber, episodeNumber, isProgressLoaded]);
+  }, [id, seasonNumber, episodeNumber, isProgressLoaded, tvShow?.name, tvShow?.poster_path]);
 
   useEffect(() => {
     if (!id || !isProgressLoaded || seasonNumber <= 0 || episodeNumber <= 0) return;
@@ -135,7 +138,7 @@ export default function TVDetailsPage() {
     const storageKey = `continue:tv:${storageId}`;
 
     const handleProgressMessage = (event: MessageEvent) => {
-      if (event.origin !== "https://player.videasy.net") return;
+      if (!event.origin.includes("videasy")) return;
 
       const payload =
         typeof event.data === "string"
@@ -148,7 +151,8 @@ export default function TVDetailsPage() {
             })()
           : event.data;
 
-      if (!payload || payload.type !== "tv") return;
+      const payloadType = String(payload?.type || payload?.mediaType || "");
+      if (!payload || payloadType !== "tv") return;
       if (String(payload.id) !== storageId) return;
 
       const payloadSeason = Number(payload.season);
@@ -162,6 +166,9 @@ export default function TVDetailsPage() {
       window.localStorage.setItem(
         storageKey,
         JSON.stringify({
+          title: tvShow?.name || "Untitled",
+          posterPath: tvShow?.poster_path || "",
+          mediaType: "tv",
           seasonNumber,
           episodeNumber,
           timestamp,
@@ -174,7 +181,7 @@ export default function TVDetailsPage() {
 
     window.addEventListener("message", handleProgressMessage);
     return () => window.removeEventListener("message", handleProgressMessage);
-  }, [id, isProgressLoaded, seasonNumber, episodeNumber]);
+  }, [id, isProgressLoaded, seasonNumber, episodeNumber, tvShow?.name, tvShow?.poster_path]);
 
   useEffect(() => {
     if (!id || !isProgressLoaded || seasonNumber <= 0 || episodeNumber <= 0) return;

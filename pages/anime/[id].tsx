@@ -139,13 +139,16 @@ export default function AnimeDetailsPage() {
     window.localStorage.setItem(
       storageKey,
       JSON.stringify({
+        title: anime?.name || "Untitled",
+        posterPath: anime?.poster_path || "",
+        mediaType: "anime-tv",
         seasonNumber,
         episodeNumber,
         timestamp: 0,
         updatedAt: new Date().toISOString(),
       })
     );
-  }, [id, animeType, seasonNumber, episodeNumber, isProgressLoaded]);
+  }, [id, animeType, seasonNumber, episodeNumber, isProgressLoaded, anime?.name, anime?.poster_path]);
 
   useEffect(() => {
     if (!id || !isProgressLoaded) return;
@@ -154,7 +157,7 @@ export default function AnimeDetailsPage() {
     const storageKey = `continue:anime:${animeType}:${storageId}`;
 
     const handleProgressMessage = (event: MessageEvent) => {
-      if (event.origin !== "https://player.videasy.net") return;
+      if (!event.origin.includes("videasy")) return;
 
       const payload =
         typeof event.data === "string"
@@ -167,7 +170,8 @@ export default function AnimeDetailsPage() {
             })()
           : event.data;
 
-      if (!payload || payload.type !== animeType) return;
+      const payloadType = String(payload?.type || payload?.mediaType || "");
+      if (!payload || payloadType !== animeType) return;
       if (String(payload.id) !== storageId) return;
 
       const payloadSeason = Number(payload.season);
@@ -181,6 +185,9 @@ export default function AnimeDetailsPage() {
       window.localStorage.setItem(
         storageKey,
         JSON.stringify({
+          title: anime?.title || anime?.name || "Untitled",
+          posterPath: anime?.poster_path || "",
+          mediaType: animeType === "movie" ? "anime-movie" : "anime-tv",
           seasonNumber: animeType === "tv" ? seasonNumber : 1,
           episodeNumber: animeType === "tv" ? episodeNumber : 1,
           timestamp,
@@ -193,7 +200,7 @@ export default function AnimeDetailsPage() {
 
     window.addEventListener("message", handleProgressMessage);
     return () => window.removeEventListener("message", handleProgressMessage);
-  }, [id, animeType, isProgressLoaded, seasonNumber, episodeNumber]);
+  }, [id, animeType, isProgressLoaded, seasonNumber, episodeNumber, anime?.poster_path, anime?.title, anime?.name]);
 
   useEffect(() => {
     if (!id || !isProgressLoaded) return;
