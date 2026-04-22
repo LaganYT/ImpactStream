@@ -1,6 +1,12 @@
 import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
+import {
+  ContinueWatchingItem,
+  continueWatchingHref,
+  hydrateContinueWatchingItems,
+  readContinueWatchingProgress,
+} from "../lib/continueWatching";
 
 type MediaType = "movie" | "tv";
 
@@ -31,6 +37,7 @@ export default function Home() {
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [continueWatching, setContinueWatching] = useState<ContinueWatchingItem[]>([]);
   const router = useRouter();
 
   const normalizeMediaType = (item: MediaItem): MediaType =>
@@ -135,6 +142,10 @@ export default function Home() {
           setSearchResults([]);
           await Promise.all([fetchTrending(), fetchCategories()]);
         }
+
+        const savedProgress = readContinueWatchingProgress();
+        const hydratedItems = await hydrateContinueWatchingItems(savedProgress.slice(0, 12));
+        setContinueWatching(hydratedItems);
       } catch {
         setError("Something went wrong while loading content. Please try again.");
       } finally {
@@ -165,6 +176,10 @@ export default function Home() {
   const handleRefinedSearch = () => {
     if (!searchInput.trim()) return;
     router.push({ pathname: "/", query: { query: searchInput.trim() } });
+  };
+  
+  const handleContinueWatchingClick = (item: ContinueWatchingItem) => {
+    router.push(continueWatchingHref(item));
   };
 
   const getTitle = (item: MediaItem) => item.title || item.name || "Untitled";
@@ -286,6 +301,37 @@ export default function Home() {
                 </div>
               ) : null}
             </section>
+
+            {continueWatching.length > 0 ? (
+              <section className="category discover-category continue-watching-section">
+                <div className="continue-watching-header">
+                  <h3>Continue Watching</h3>
+                  <a href="/continue-watching" className="continue-watching-link">
+                    View all
+                  </a>
+                </div>
+                <div className="category-scroll">
+                  {continueWatching.slice(0, 10).map((item) => (
+                    <div
+                      key={`${item.kind}-${item.id}`}
+                      className="category-item"
+                      onClick={() => handleContinueWatchingClick(item)}
+                    >
+                      <img
+                        src={item.posterPath ? `https://image.tmdb.org/t/p/w500${item.posterPath}` : "/no-image.svg"}
+                        alt={item.title}
+                      />
+                      <h4>{item.title}</h4>
+                      <p className="continue-watching-meta">
+                        {item.kind.includes("tv")
+                          ? `S${item.seasonNumber} • E${item.episodeNumber}`
+                          : `${Math.round(item.progress)}% watched`}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : null}
 
             <section className="categories">
               {Object.entries(categories).map(([key, items]) => (

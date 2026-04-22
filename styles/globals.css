@@ -2811,6 +2811,56 @@ button:active {
   background: linear-gradient(90deg, var(--impact-accent), var(--impact-accent-strong));
 }
 
+.continue-watching-section {
+  margin-bottom: 1.2rem;
+}
+
+.continue-watching-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.continue-watching-link {
+  color: var(--impact-accent-strong);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.continue-watching-meta {
+  margin-top: 0.2rem;
+  font-size: 0.76rem;
+  color: var(--impact-text-muted);
+}
+
+.continue-page-shell {
+  padding-top: 2.4rem;
+}
+
+.continue-page-header {
+  margin-bottom: 1.1rem;
+}
+
+.continue-page-header h1 {
+  font-size: clamp(1.8rem, 2.8vw, 2.4rem);
+}
+
+.continue-page-header p {
+  margin-top: 0.35rem;
+  color: var(--impact-text-muted);
+}
+
+.continue-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
+.continue-card .discover-card-content p {
+  min-height: 2.2em;
+}
+
 .detail-shell {
   --detail-stage: rgba(7, 11, 19, 0.92);
   --detail-stage-strong: rgba(255, 255, 255, 0.07);
