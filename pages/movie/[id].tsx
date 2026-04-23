@@ -85,13 +85,17 @@ export default function MovieDetailsPage() {
           duration,
           progress,
           updatedAt: new Date().toISOString(),
+          title: movie?.title || undefined,
+          posterPath: movie?.poster_path || undefined,
+          mediaType: "movie",
+          tmdbId: storageId,
         })
       );
     };
 
     window.addEventListener("message", handleProgressMessage);
     return () => window.removeEventListener("message", handleProgressMessage);
-  }, [id]);
+  }, [id, movie]);
 
   useEffect(() => {
     if (!id) return;
@@ -107,6 +111,39 @@ export default function MovieDetailsPage() {
 
     fetchDetails();
   }, [id]);
+
+  useEffect(() => {
+    if (!id || !movie) return;
+
+    const storageId = Array.isArray(id) ? id[0] : id;
+    const storageKey = `continue:movie:${storageId}`;
+
+    try {
+      const existing = window.localStorage.getItem(storageKey);
+      const parsed = existing ? JSON.parse(existing) : {};
+      window.localStorage.setItem(
+        storageKey,
+        JSON.stringify({
+          ...parsed,
+          title: movie.title || parsed.title,
+          posterPath: movie.poster_path || parsed.posterPath,
+          mediaType: "movie",
+          tmdbId: storageId,
+          updatedAt: parsed.updatedAt || new Date().toISOString(),
+        })
+      );
+
+      const indexKey = "continueWatching:index";
+      const indexRaw = window.localStorage.getItem(indexKey);
+      const index: string[] = indexRaw ? JSON.parse(indexRaw) : [];
+      const entry = `movie:${storageId}`;
+      const filtered = index.filter((e) => e !== entry);
+      filtered.unshift(entry);
+      window.localStorage.setItem(indexKey, JSON.stringify(filtered.slice(0, 50)));
+    } catch {
+      // Ignore storage errors.
+    }
+  }, [id, movie]);
 
   const title = movie?.title || "Untitled";
   const releaseDate = movie?.release_date || "Unknown";

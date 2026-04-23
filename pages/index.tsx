@@ -1,6 +1,7 @@
 import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
+import ContinueWatchingRow from "../components/ContinueWatchingRow";
 
 type MediaType = "movie" | "tv";
 
@@ -286,6 +287,8 @@ export default function Home() {
                 </div>
               ) : null}
             </section>
+
+            <ContinueWatchingRow maxItems={12} showViewAll={true} />
 
             <section className="categories">
               {Object.entries(categories).map(([key, items]) => (
