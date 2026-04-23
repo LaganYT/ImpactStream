@@ -136,6 +136,31 @@ export default function AnimeDetailsPage() {
 
     const storageId = Array.isArray(id) ? id[0] : id;
     const storageKey = `continue:anime:tv:${storageId}`;
+    let existingTimestamp = 0;
+    let existingDuration = 0;
+    let existingProgress = 0;
+
+    try {
+      const stored = window.localStorage.getItem(storageKey);
+      if (stored) {
+        const parsed = JSON.parse(stored) as {
+          seasonNumber?: number;
+          episodeNumber?: number;
+          timestamp?: number;
+          duration?: number;
+          progress?: number;
+        };
+
+        if (Number(parsed.seasonNumber) === seasonNumber && Number(parsed.episodeNumber) === episodeNumber) {
+          existingTimestamp = Math.max(0, Math.floor(Number(parsed.timestamp || 0)));
+          existingDuration = Math.max(0, Math.floor(Number(parsed.duration || 0)));
+          existingProgress = Math.max(0, Math.min(100, Number(parsed.progress || 0)));
+        }
+      }
+    } catch {
+      // Ignore invalid localStorage data.
+    }
+
     window.localStorage.setItem(
       storageKey,
       JSON.stringify({
@@ -144,7 +169,9 @@ export default function AnimeDetailsPage() {
         mediaType: "anime-tv",
         seasonNumber,
         episodeNumber,
-        timestamp: 0,
+        timestamp: existingTimestamp,
+        duration: existingDuration,
+        progress: existingProgress,
         updatedAt: new Date().toISOString(),
       })
     );
