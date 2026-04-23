@@ -69,7 +69,8 @@ export const readContinueWatchingProgress = (): ContinueWatchingProgress[] => {
       const cachedTitle = String(parsed.title || "");
       const cachedPosterPath = String(parsed.posterPath || "");
 
-      if (timestamp <= 0 && progress <= 0) continue;
+      const hasAnyWatchSignal = timestamp > 0 || progress > 0 || Boolean(updatedAt);
+      if (!hasAnyWatchSignal) continue;
 
       entries.push({
         kind,
