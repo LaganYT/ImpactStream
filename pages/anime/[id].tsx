@@ -67,6 +67,39 @@ export default function AnimeDetailsPage() {
   }, [id, animeType]);
 
   useEffect(() => {
+    if (!id || !anime) return;
+
+    const storageId = Array.isArray(id) ? id[0] : id;
+    const storageKey = `continue:anime:${animeType}:${storageId}`;
+
+    try {
+      const existing = window.localStorage.getItem(storageKey);
+      const parsed = existing ? JSON.parse(existing) : {};
+      window.localStorage.setItem(
+        storageKey,
+        JSON.stringify({
+          ...parsed,
+          title: anime.title || anime.name || parsed.title,
+          posterPath: anime.poster_path || parsed.posterPath,
+          mediaType: `anime:${animeType}`,
+          tmdbId: storageId,
+          updatedAt: parsed.updatedAt || new Date().toISOString(),
+        })
+      );
+
+      const indexKey = "continueWatching:index";
+      const indexRaw = window.localStorage.getItem(indexKey);
+      const index: string[] = indexRaw ? JSON.parse(indexRaw) : [];
+      const entry = `anime:${animeType}:${storageId}`;
+      const filtered = index.filter((e) => e !== entry);
+      filtered.unshift(entry);
+      window.localStorage.setItem(indexKey, JSON.stringify(filtered.slice(0, 50)));
+    } catch {
+      // Ignore storage errors.
+    }
+  }, [id, anime, animeType]);
+
+  useEffect(() => {
     if (!id || animeType !== "tv") {
       setIsProgressLoaded(true);
       return;
@@ -187,13 +220,17 @@ export default function AnimeDetailsPage() {
           duration,
           progress,
           updatedAt: new Date().toISOString(),
+          title: anime?.title || anime?.name || undefined,
+          posterPath: anime?.poster_path || undefined,
+          mediaType: `anime:${animeType}`,
+          tmdbId: storageId,
         })
       );
     };
 
     window.addEventListener("message", handleProgressMessage);
     return () => window.removeEventListener("message", handleProgressMessage);
-  }, [id, animeType, isProgressLoaded, seasonNumber, episodeNumber]);
+  }, [id, animeType, isProgressLoaded, seasonNumber, episodeNumber, anime]);
 
   useEffect(() => {
     if (!id || !isProgressLoaded) return;

@@ -51,6 +51,39 @@ export default function TVDetailsPage() {
   }, [id]);
 
   useEffect(() => {
+    if (!id || !tvShow) return;
+
+    const storageId = Array.isArray(id) ? id[0] : id;
+    const storageKey = `continue:tv:${storageId}`;
+
+    try {
+      const existing = window.localStorage.getItem(storageKey);
+      const parsed = existing ? JSON.parse(existing) : {};
+      window.localStorage.setItem(
+        storageKey,
+        JSON.stringify({
+          ...parsed,
+          title: tvShow.name || parsed.title,
+          posterPath: tvShow.poster_path || parsed.posterPath,
+          mediaType: "tv",
+          tmdbId: storageId,
+          updatedAt: parsed.updatedAt || new Date().toISOString(),
+        })
+      );
+
+      const indexKey = "continueWatching:index";
+      const indexRaw = window.localStorage.getItem(indexKey);
+      const index: string[] = indexRaw ? JSON.parse(indexRaw) : [];
+      const entry = `tv:${storageId}`;
+      const filtered = index.filter((e) => e !== entry);
+      filtered.unshift(entry);
+      window.localStorage.setItem(indexKey, JSON.stringify(filtered.slice(0, 50)));
+    } catch {
+      // Ignore storage errors.
+    }
+  }, [id, tvShow]);
+
+  useEffect(() => {
     if (!id) return;
 
     const storageId = Array.isArray(id) ? id[0] : id;
@@ -168,13 +201,17 @@ export default function TVDetailsPage() {
           duration,
           progress,
           updatedAt: new Date().toISOString(),
+          title: tvShow?.name || undefined,
+          posterPath: tvShow?.poster_path || undefined,
+          mediaType: "tv",
+          tmdbId: storageId,
         })
       );
     };
 
     window.addEventListener("message", handleProgressMessage);
     return () => window.removeEventListener("message", handleProgressMessage);
-  }, [id, isProgressLoaded, seasonNumber, episodeNumber]);
+  }, [id, isProgressLoaded, seasonNumber, episodeNumber, tvShow]);
 
   useEffect(() => {
     if (!id || !isProgressLoaded || seasonNumber <= 0 || episodeNumber <= 0) return;
