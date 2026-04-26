@@ -31,6 +31,20 @@ type AnimeDetails = {
   };
 };
 
+function shouldTrackContinueWatching(input: {
+  seasonNumber?: number;
+  episodeNumber?: number;
+  timestamp?: number;
+  progress?: number;
+}) {
+  const season = Number(input.seasonNumber || 1);
+  const episode = Number(input.episodeNumber || 1);
+  const timestamp = Math.max(0, Number(input.timestamp || 0));
+  const progress = Math.max(0, Number(input.progress || 0));
+
+  return timestamp > 0 || progress > 0 || season !== 1 || episode !== 1;
+}
+
 export default function AnimeDetailsPage() {
   const router = useRouter();
   const { id, type } = router.query;
@@ -71,28 +85,29 @@ export default function AnimeDetailsPage() {
 
     const storageId = Array.isArray(id) ? id[0] : id;
     const storageKey = `continue:anime:${animeType}:${storageId}`;
+    const indexKey = "continueWatching:index";
 
     try {
       const existing = window.localStorage.getItem(storageKey);
       const parsed = existing ? JSON.parse(existing) : {};
-      window.localStorage.setItem(
-        storageKey,
-        JSON.stringify({
-          ...parsed,
-          title: anime.title || anime.name || parsed.title,
-          posterPath: anime.poster_path || parsed.posterPath,
-          mediaType: `anime:${animeType}`,
-          tmdbId: storageId,
-          updatedAt: parsed.updatedAt || new Date().toISOString(),
-        })
-      );
-
-      const indexKey = "continueWatching:index";
       const indexRaw = window.localStorage.getItem(indexKey);
       const index: string[] = indexRaw ? JSON.parse(indexRaw) : [];
       const entry = `anime:${animeType}:${storageId}`;
+      const nextData = {
+        ...parsed,
+        title: anime.title || anime.name || parsed.title,
+        posterPath: anime.poster_path || parsed.posterPath,
+        mediaType: `anime:${animeType}`,
+        tmdbId: storageId,
+        updatedAt: parsed.updatedAt || new Date().toISOString(),
+      };
+
+      window.localStorage.setItem(storageKey, JSON.stringify(nextData));
+
       const filtered = index.filter((e) => e !== entry);
-      filtered.unshift(entry);
+      if (animeType === "movie" || shouldTrackContinueWatching(nextData)) {
+        filtered.unshift(entry);
+      }
       window.localStorage.setItem(indexKey, JSON.stringify(filtered.slice(0, 50)));
     } catch {
       // Ignore storage errors.
@@ -169,15 +184,39 @@ export default function AnimeDetailsPage() {
 
     const storageId = Array.isArray(id) ? id[0] : id;
     const storageKey = `continue:anime:tv:${storageId}`;
-    window.localStorage.setItem(
-      storageKey,
-      JSON.stringify({
+    const indexKey = "continueWatching:index";
+    const entry = `anime:tv:${storageId}`;
+
+    try {
+      const existing = window.localStorage.getItem(storageKey);
+      const parsed = existing ? JSON.parse(existing) : {};
+      const nextData = {
+        ...parsed,
         seasonNumber,
         episodeNumber,
-        timestamp: 0,
+        timestamp:
+          Number(parsed.seasonNumber) === seasonNumber && Number(parsed.episodeNumber) === episodeNumber
+            ? Math.max(0, Math.floor(Number(parsed.timestamp || 0)))
+            : 0,
+        progress:
+          Number(parsed.seasonNumber) === seasonNumber && Number(parsed.episodeNumber) === episodeNumber
+            ? Math.max(0, Math.min(100, Number(parsed.progress || 0)))
+            : 0,
         updatedAt: new Date().toISOString(),
-      })
-    );
+      };
+
+      window.localStorage.setItem(storageKey, JSON.stringify(nextData));
+
+      const indexRaw = window.localStorage.getItem(indexKey);
+      const index: string[] = indexRaw ? JSON.parse(indexRaw) : [];
+      const filtered = index.filter((e) => e !== entry);
+      if (shouldTrackContinueWatching(nextData)) {
+        filtered.unshift(entry);
+      }
+      window.localStorage.setItem(indexKey, JSON.stringify(filtered.slice(0, 50)));
+    } catch {
+      // Ignore storage errors.
+    }
   }, [id, animeType, seasonNumber, episodeNumber, isProgressLoaded]);
 
   useEffect(() => {
@@ -205,27 +244,47 @@ export default function AnimeDetailsPage() {
 
       const payloadSeason = Number(payload.season);
       const payloadEpisode = Number(payload.episode);
-      if (animeType === "tv" && (payloadSeason !== seasonNumber || payloadEpisode !== episodeNumber)) return;
+      if (animeType === "tv" && payloadSeason > 0 && payloadEpisode > 0) {
+        if (payloadSeason !== seasonNumber) {
+          setSeasonNumber(payloadSeason);
+        }
+        if (payloadEpisode !== episodeNumber) {
+          setEpisodeNumber(payloadEpisode);
+        }
+      }
 
       const timestamp = Math.max(0, Math.floor(Number(payload.timestamp || 0)));
       const duration = Math.max(0, Math.floor(Number(payload.duration || 0)));
       const progress = Math.max(0, Math.min(100, Number(payload.progress || 0)));
+      const nextSeason = animeType === "tv" && payloadSeason > 0 ? payloadSeason : 1;
+      const nextEpisode = animeType === "tv" && payloadEpisode > 0 ? payloadEpisode : 1;
+      const nextData = {
+        seasonNumber: nextSeason,
+        episodeNumber: nextEpisode,
+        timestamp,
+        duration,
+        progress,
+        updatedAt: new Date().toISOString(),
+        title: anime?.title || anime?.name || undefined,
+        posterPath: anime?.poster_path || undefined,
+        mediaType: `anime:${animeType}`,
+        tmdbId: storageId,
+      };
 
       window.localStorage.setItem(
         storageKey,
-        JSON.stringify({
-          seasonNumber: animeType === "tv" ? seasonNumber : 1,
-          episodeNumber: animeType === "tv" ? episodeNumber : 1,
-          timestamp,
-          duration,
-          progress,
-          updatedAt: new Date().toISOString(),
-          title: anime?.title || anime?.name || undefined,
-          posterPath: anime?.poster_path || undefined,
-          mediaType: `anime:${animeType}`,
-          tmdbId: storageId,
-        })
+        JSON.stringify(nextData)
       );
+
+      const indexKey = "continueWatching:index";
+      const indexRaw = window.localStorage.getItem(indexKey);
+      const index: string[] = indexRaw ? JSON.parse(indexRaw) : [];
+      const entry = `anime:${animeType}:${storageId}`;
+      const filtered = index.filter((e) => e !== entry);
+      if (animeType === "movie" || shouldTrackContinueWatching(nextData)) {
+        filtered.unshift(entry);
+      }
+      window.localStorage.setItem(indexKey, JSON.stringify(filtered.slice(0, 50)));
     };
 
     window.addEventListener("message", handleProgressMessage);
@@ -286,6 +345,7 @@ export default function AnimeDetailsPage() {
     if (animeType === "movie") {
       const query = new URLSearchParams({
         color: "e50914",
+        autoplay: "true",
         nextEpisode: "true",
         episodeSelector: "true",
         overlay: "true",
@@ -298,6 +358,7 @@ export default function AnimeDetailsPage() {
 
     const query = new URLSearchParams({
       color: "e50914",
+      autoplay: "true",
       nextEpisode: "true",
       episodeSelector: "true",
       autoplayNextEpisode: "true",

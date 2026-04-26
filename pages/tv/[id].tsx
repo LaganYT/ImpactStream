@@ -21,6 +21,20 @@ type TVDetails = {
   genres?: { id: number; name: string }[];
 };
 
+function shouldTrackContinueWatching(input: {
+  seasonNumber?: number;
+  episodeNumber?: number;
+  timestamp?: number;
+  progress?: number;
+}) {
+  const season = Number(input.seasonNumber || 1);
+  const episode = Number(input.episodeNumber || 1);
+  const timestamp = Math.max(0, Number(input.timestamp || 0));
+  const progress = Math.max(0, Number(input.progress || 0));
+
+  return timestamp > 0 || progress > 0 || season !== 1 || episode !== 1;
+}
+
 export default function TVDetailsPage() {
   const router = useRouter();
   const { id } = router.query;
@@ -55,28 +69,29 @@ export default function TVDetailsPage() {
 
     const storageId = Array.isArray(id) ? id[0] : id;
     const storageKey = `continue:tv:${storageId}`;
+    const indexKey = "continueWatching:index";
 
     try {
       const existing = window.localStorage.getItem(storageKey);
       const parsed = existing ? JSON.parse(existing) : {};
-      window.localStorage.setItem(
-        storageKey,
-        JSON.stringify({
-          ...parsed,
-          title: tvShow.name || parsed.title,
-          posterPath: tvShow.poster_path || parsed.posterPath,
-          mediaType: "tv",
-          tmdbId: storageId,
-          updatedAt: parsed.updatedAt || new Date().toISOString(),
-        })
-      );
-
-      const indexKey = "continueWatching:index";
       const indexRaw = window.localStorage.getItem(indexKey);
       const index: string[] = indexRaw ? JSON.parse(indexRaw) : [];
       const entry = `tv:${storageId}`;
+      const nextData = {
+        ...parsed,
+        title: tvShow.name || parsed.title,
+        posterPath: tvShow.poster_path || parsed.posterPath,
+        mediaType: "tv",
+        tmdbId: storageId,
+        updatedAt: parsed.updatedAt || new Date().toISOString(),
+      };
+
+      window.localStorage.setItem(storageKey, JSON.stringify(nextData));
+
       const filtered = index.filter((e) => e !== entry);
-      filtered.unshift(entry);
+      if (shouldTrackContinueWatching(nextData)) {
+        filtered.unshift(entry);
+      }
       window.localStorage.setItem(indexKey, JSON.stringify(filtered.slice(0, 50)));
     } catch {
       // Ignore storage errors.
@@ -150,15 +165,39 @@ export default function TVDetailsPage() {
 
     const storageId = Array.isArray(id) ? id[0] : id;
     const storageKey = `continue:tv:${storageId}`;
-    window.localStorage.setItem(
-      storageKey,
-      JSON.stringify({
+    const indexKey = "continueWatching:index";
+    const entry = `tv:${storageId}`;
+
+    try {
+      const existing = window.localStorage.getItem(storageKey);
+      const parsed = existing ? JSON.parse(existing) : {};
+      const nextData = {
+        ...parsed,
         seasonNumber,
         episodeNumber,
-        timestamp: 0,
+        timestamp:
+          Number(parsed.seasonNumber) === seasonNumber && Number(parsed.episodeNumber) === episodeNumber
+            ? Math.max(0, Math.floor(Number(parsed.timestamp || 0)))
+            : 0,
+        progress:
+          Number(parsed.seasonNumber) === seasonNumber && Number(parsed.episodeNumber) === episodeNumber
+            ? Math.max(0, Math.min(100, Number(parsed.progress || 0)))
+            : 0,
         updatedAt: new Date().toISOString(),
-      })
-    );
+      };
+
+      window.localStorage.setItem(storageKey, JSON.stringify(nextData));
+
+      const indexRaw = window.localStorage.getItem(indexKey);
+      const index: string[] = indexRaw ? JSON.parse(indexRaw) : [];
+      const filtered = index.filter((e) => e !== entry);
+      if (shouldTrackContinueWatching(nextData)) {
+        filtered.unshift(entry);
+      }
+      window.localStorage.setItem(indexKey, JSON.stringify(filtered.slice(0, 50)));
+    } catch {
+      // Ignore storage errors.
+    }
   }, [id, seasonNumber, episodeNumber, isProgressLoaded]);
 
   useEffect(() => {
@@ -186,27 +225,47 @@ export default function TVDetailsPage() {
 
       const payloadSeason = Number(payload.season);
       const payloadEpisode = Number(payload.episode);
-      if (payloadSeason !== seasonNumber || payloadEpisode !== episodeNumber) return;
+      if (payloadSeason > 0 && payloadEpisode > 0) {
+        if (payloadSeason !== seasonNumber) {
+          setSeasonNumber(payloadSeason);
+        }
+        if (payloadEpisode !== episodeNumber) {
+          setEpisodeNumber(payloadEpisode);
+        }
+      }
 
       const timestamp = Math.max(0, Math.floor(Number(payload.timestamp || 0)));
       const duration = Math.max(0, Math.floor(Number(payload.duration || 0)));
       const progress = Math.max(0, Math.min(100, Number(payload.progress || 0)));
+      const nextSeason = payloadSeason > 0 ? payloadSeason : seasonNumber;
+      const nextEpisode = payloadEpisode > 0 ? payloadEpisode : episodeNumber;
+      const nextData = {
+        seasonNumber: nextSeason,
+        episodeNumber: nextEpisode,
+        timestamp,
+        duration,
+        progress,
+        updatedAt: new Date().toISOString(),
+        title: tvShow?.name || undefined,
+        posterPath: tvShow?.poster_path || undefined,
+        mediaType: "tv",
+        tmdbId: storageId,
+      };
 
       window.localStorage.setItem(
         storageKey,
-        JSON.stringify({
-          seasonNumber,
-          episodeNumber,
-          timestamp,
-          duration,
-          progress,
-          updatedAt: new Date().toISOString(),
-          title: tvShow?.name || undefined,
-          posterPath: tvShow?.poster_path || undefined,
-          mediaType: "tv",
-          tmdbId: storageId,
-        })
+        JSON.stringify(nextData)
       );
+
+      const indexKey = "continueWatching:index";
+      const indexRaw = window.localStorage.getItem(indexKey);
+      const index: string[] = indexRaw ? JSON.parse(indexRaw) : [];
+      const entry = `tv:${storageId}`;
+      const filtered = index.filter((e) => e !== entry);
+      if (shouldTrackContinueWatching(nextData)) {
+        filtered.unshift(entry);
+      }
+      window.localStorage.setItem(indexKey, JSON.stringify(filtered.slice(0, 50)));
     };
 
     window.addEventListener("message", handleProgressMessage);
@@ -275,6 +334,7 @@ export default function TVDetailsPage() {
   const tvId = Array.isArray(id) ? id[0] : id;
   const tvQuery = new URLSearchParams({
     color: "e50914",
+    autoplay: "true",
     nextEpisode: "true",
     episodeSelector: "true",
     autoplayNextEpisode: "true",

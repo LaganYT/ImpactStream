@@ -49,6 +49,7 @@ export default function MediaDetailShell({
             id="framez"
             src={embedUrl}
             allowFullScreen
+            allow="autoplay; fullscreen; picture-in-picture"
             className="movie-iframe"
           />
         </div>
