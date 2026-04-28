@@ -71,25 +71,53 @@ export default async function handler(
     const totalSeasons =
       tmdbType === "tv" ? Number(payload.number_of_seasons || 0) : undefined;
 
-    let episodesPerSeason: Array<{ seasonNumber: number; episodeCount: number | null }> | undefined =
-      undefined;
+    let episodesPerSeason:
+      | Array<{
+          seasonNumber: number;
+          episodeCount: number | null;
+          episodes?: Array<{
+            episodeNumber: number;
+            name?: string | null;
+            stillPath?: string | null;
+            overview?: string | null;
+          }>;
+        }>
+      | undefined = undefined;
+
     if (tmdbType === "tv") {
-      const seasons = payload.seasons || [];
+      const seasonsList: number[] =
+        payload.seasons && payload.seasons.length > 0
+          ? payload.seasons.map((s) => s.season_number)
+          : totalSeasons
+          ? Array.from({ length: totalSeasons }, (_, i) => i + 1)
+          : [];
+
       episodesPerSeason = await Promise.all(
-        seasons.map(async (s) => {
-          if (typeof s.episode_count === "number") {
-            return { seasonNumber: s.season_number, episodeCount: s.episode_count };
-          }
+        seasonsList.map(async (seasonNumber) => {
           try {
-            const seasonDetail = await tmdbGet<{ episodes?: any[] }>(
-              `/tv/${id}/season/${s.season_number}`
-            );
+            const seasonDetail = await tmdbGet<{
+              episodes?: Array<{
+                episode_number: number;
+                name?: string;
+                still_path?: string | null;
+                overview?: string | null;
+              }>;
+            }>(`/tv/${id}/season/${seasonNumber}`);
+
+            const eps = (seasonDetail.episodes || []).map((e) => ({
+              episodeNumber: e.episode_number,
+              name: e.name || null,
+              stillPath: e.still_path ? `https://image.tmdb.org/t/p/original${e.still_path}` : null,
+              overview: e.overview || null,
+            }));
+
             return {
-              seasonNumber: s.season_number,
+              seasonNumber,
               episodeCount: seasonDetail.episodes ? seasonDetail.episodes.length : null,
+              episodes: eps,
             };
           } catch (e) {
-            return { seasonNumber: s.season_number, episodeCount: null };
+            return { seasonNumber, episodeCount: null, episodes: [] };
           }
         })
       );
