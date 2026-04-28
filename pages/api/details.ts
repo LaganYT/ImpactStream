@@ -22,6 +22,10 @@ type TmdbDetailPayload = {
   external_ids?: {
     imdb_id?: string;
   };
+  seasons?: Array<{
+    season_number: number;
+    episode_count?: number;
+  }>;
 };
 
 export default async function handler(
@@ -67,10 +71,35 @@ export default async function handler(
     const totalSeasons =
       tmdbType === "tv" ? Number(payload.number_of_seasons || 0) : undefined;
 
+    let episodesPerSeason: Array<{ seasonNumber: number; episodeCount: number | null }> | undefined =
+      undefined;
+    if (tmdbType === "tv") {
+      const seasons = payload.seasons || [];
+      episodesPerSeason = await Promise.all(
+        seasons.map(async (s) => {
+          if (typeof s.episode_count === "number") {
+            return { seasonNumber: s.season_number, episodeCount: s.episode_count };
+          }
+          try {
+            const seasonDetail = await tmdbGet<{ episodes?: any[] }>(
+              `/tv/${id}/season/${s.season_number}`
+            );
+            return {
+              seasonNumber: s.season_number,
+              episodeCount: seasonDetail.episodes ? seasonDetail.episodes.length : null,
+            };
+          } catch (e) {
+            return { seasonNumber: s.season_number, episodeCount: null };
+          }
+        })
+      );
+    }
+
     return res.status(200).json({
       ...detail,
       imdbId,
       totalSeasons,
+      episodesPerSeason,
       playbackAvailable: false,
       downloadAvailable: false,
       authorizedPlaybackUrl: null,
