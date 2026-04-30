@@ -1,0 +1,1553 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:webview_flutter/webview_flutter.dart';
+
+import '../../data/models/catalog_item.dart';
+import '../../data/models/downloaded_media.dart';
+import '../../data/repositories/downloads_repository.dart';
+import '../../state/watch_progress_controller.dart';
+import '../shared/media/custom_video_player_html.dart';
+
+class AuthorizedPlaybackScreen extends StatefulWidget {
+  const AuthorizedPlaybackScreen({
+    super.key,
+    required this.title,
+    required this.streamUrl,
+    required this.tmdbId,
+    required this.tmdbType,
+    this.seasonsLabel,
+    this.totalSeasons,
+    this.totalEpisodes,
+    this.seasons = const [],
+    this.watchProgressController,
+    this.thumbnailUrl,
+  });
+
+  final String title;
+  final String streamUrl;
+  final String tmdbId;
+  final String tmdbType;
+  final String? seasonsLabel;
+  final int? totalSeasons;
+  final int? totalEpisodes;
+  final List<CatalogSeason> seasons;
+  final WatchProgressController? watchProgressController;
+  final String? thumbnailUrl;
+
+  @override
+  State<AuthorizedPlaybackScreen> createState() =>
+      _AuthorizedPlaybackScreenState();
+}
+
+class _AuthorizedPlaybackScreenState extends State<AuthorizedPlaybackScreen> {
+  static const DownloadsRepository _downloadsRepository = DownloadsRepository();
+  static final WebViewCookieManager _cookieManager = WebViewCookieManager();
+  static const List<String> _sourceOptions = <String>[
+    'Auto',
+    'Neon',
+    'Yoru',
+    'Cypher',
+    'Sage',
+    'Jett',
+    'Reyna',
+    'Breach',
+    'Vyse',
+  ];
+
+  late WebViewController _controller;
+  Completer<String>? _m3u8Completer;
+  bool _isResolving = true;
+  bool _isDownloading = false;
+  bool _isTearingDown = false;
+  double _downloadProgress = 0;
+  int _playbackResolveToken = 0;
+  int _currentSeason = 1;
+  int _currentEpisode = 1;
+  String? _currentStreamUrl;
+  String? _resolvedM3u8Url;
+  String? _downloadStatus;
+  String? _playbackError;
+  String _selectedSource = 'Auto';
+  String? _selectedQualityUrl;
+  String? _selectedQualityLabel;
+  List<_StreamQuality> _availableQualities = const [];
+
+  double _lastKnownPosition = 0;
+  double _lastKnownDuration = 0;
+
+  bool get _isTv => widget.tmdbType == 'tv';
+
+  List<CatalogSeason> get _seasons {
+    if (widget.seasons.isNotEmpty) {
+      return widget.seasons;
+    }
+
+    final seasonCount = _apiSeasonCount;
+    final totalEpisodes = widget.totalEpisodes;
+    return List<CatalogSeason>.generate(seasonCount, (index) {
+      final seasonNumber = index + 1;
+      return CatalogSeason(
+        seasonNumber: seasonNumber,
+        episodeCount: _distributedEpisodeCount(
+          seasonNumber: seasonNumber,
+          seasonCount: seasonCount,
+          totalEpisodes: totalEpisodes,
+        ),
+      );
+    });
+  }
+
+  int get _apiSeasonCount {
+    if (widget.totalSeasons != null && widget.totalSeasons! > 0) {
+      return widget.totalSeasons!;
+    }
+    if (widget.seasons.isNotEmpty) {
+      return widget.seasons.length;
+    }
+    final label = widget.seasonsLabel;
+    if (label == null) {
+      return 1;
+    }
+    final match = RegExp(r'\d+').firstMatch(label);
+    return int.tryParse(match?.group(0) ?? '') ?? 1;
+  }
+
+  int get _episodeCount {
+    final selectedSeason = _seasons.where(
+      (season) => season.seasonNumber == _currentSeason,
+    );
+    if (selectedSeason.isNotEmpty) {
+      return selectedSeason.first.episodeCount;
+    }
+    return _seasons.isEmpty ? 1 : _seasons.first.episodeCount;
+  }
+
+  List<CatalogSeason> get _selectableSeasons {
+    if (_seasons.isNotEmpty) {
+      return _seasons;
+    }
+    return const [CatalogSeason(seasonNumber: 1, episodeCount: 1)];
+  }
+
+  int _distributedEpisodeCount({
+    required int seasonNumber,
+    required int seasonCount,
+    required int? totalEpisodes,
+  }) {
+    if (totalEpisodes == null || totalEpisodes <= 0 || seasonCount <= 0) {
+      return 1;
+    }
+
+    final baseCount = totalEpisodes ~/ seasonCount;
+    final remainder = totalEpisodes % seasonCount;
+    return baseCount + (seasonNumber <= remainder ? 1 : 0);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _syncEpisodeFromStreamUrl(widget.streamUrl);
+    _controller = _createWebViewController();
+    _currentStreamUrl = widget.streamUrl;
+    unawaited(_resolveAndLoadPlayer());
+  }
+
+  WebViewController _createWebViewController() {
+    return WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..addJavaScriptChannel(
+        'ImpactstreamM3u8',
+        onMessageReceived: _handleM3u8Message,
+      )
+      ..addJavaScriptChannel(
+        'ImpactstreamProgress',
+        onMessageReceived: _handleProgressMessage,
+      )
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageFinished: (String? url) async {
+            await _installClientSideM3u8Capture();
+          },
+          onNavigationRequest: (request) => NavigationDecision.navigate,
+        ),
+      );
+  }
+
+  void _handleProgressMessage(JavaScriptMessage message) {
+    try {
+      final data = jsonDecode(message.message) as Map<String, dynamic>;
+      final position = (data['position'] as num?)?.toDouble() ?? 0;
+      final duration = (data['duration'] as num?)?.toDouble() ?? 0;
+      if (position > 0 && duration > 0) {
+        _lastKnownPosition = position;
+        _lastKnownDuration = duration;
+        _saveCurrentProgress();
+      }
+    } catch (_) {}
+  }
+
+  void _saveCurrentProgress() {
+    final controller = widget.watchProgressController;
+    if (controller == null) return;
+    if (_lastKnownPosition < 10 || _lastKnownDuration <= 0) return;
+
+    unawaited(controller.saveProgress(
+      tmdbId: widget.tmdbId,
+      tmdbType: widget.tmdbType,
+      title: widget.title,
+      thumbnailUrl: widget.thumbnailUrl,
+      season: _isTv ? _currentSeason : null,
+      episode: _isTv ? _currentEpisode : null,
+      streamUrl: _currentStreamUrl ?? widget.streamUrl,
+      positionSeconds: _lastKnownPosition,
+      durationSeconds: _lastKnownDuration,
+    ));
+  }
+
+  Future<void> _resolveAndLoadPlayer() async {
+    final resolveToken = ++_playbackResolveToken;
+    final streamUrl = _currentStreamUrl ?? widget.streamUrl;
+
+    final oldController = _controller;
+    setState(() {
+      _isResolving = true;
+      _resolvedM3u8Url = null;
+      _playbackError = null;
+      _controller = _createWebViewController();
+    });
+    unawaited(_stopOldController(oldController));
+
+    try {
+      final m3u8Url = await _resolveVideasyM3u8Link(streamUrl);
+      if (!mounted || _isTearingDown || resolveToken != _playbackResolveToken) {
+        return;
+      }
+      final playbackUrl = await _selectPlaybackQualityUrl(m3u8Url);
+      if (!mounted || _isTearingDown || resolveToken != _playbackResolveToken) {
+        return;
+      }
+      _resolvedM3u8Url = playbackUrl;
+      await _loadMediaPlayer(playbackUrl);
+      if (mounted && resolveToken == _playbackResolveToken) {
+        setState(() => _isResolving = false);
+      }
+    } catch (error) {
+      if (!mounted || _isTearingDown || resolveToken != _playbackResolveToken) {
+        return;
+      }
+      setState(() {
+        _isResolving = false;
+        _playbackError = error.toString();
+      });
+    }
+  }
+
+  void _loadEpisode({required int season, required int episode}) {
+    final tmdbId = int.tryParse(widget.tmdbId);
+    if (!_isTv || tmdbId == null || tmdbId <= 0) {
+      return;
+    }
+
+    _saveCurrentProgress();
+
+    final nextSeason = _normalizeSeason(season);
+    final nextEpisode = episode
+        .clamp(1, _episodeCountForSeason(nextSeason))
+        .toInt();
+    setState(() {
+      _currentSeason = nextSeason;
+      _currentEpisode = nextEpisode;
+      _selectedQualityUrl = null;
+      _selectedQualityLabel = null;
+      _availableQualities = const [];
+      _currentStreamUrl =
+          'https://player.videasy.net/tv/$tmdbId/$nextSeason/$nextEpisode'
+          '?color=e50914&nextEpisode=true&episodeSelector=true&autoplayNextEpisode=true';
+    });
+    unawaited(_resolveAndLoadPlayer());
+  }
+
+  int _normalizeSeason(int season) {
+    if (_selectableSeasons.any((entry) => entry.seasonNumber == season)) {
+      return season;
+    }
+    final nonSpecials = _selectableSeasons.where(
+      (entry) => entry.seasonNumber > 0,
+    );
+    return nonSpecials.isNotEmpty
+        ? nonSpecials.first.seasonNumber
+        : _selectableSeasons.first.seasonNumber;
+  }
+
+  int _episodeCountForSeason(int season) {
+    final matches = _selectableSeasons.where(
+      (entry) => entry.seasonNumber == season,
+    );
+    return matches.isEmpty ? 1 : matches.first.episodeCount;
+  }
+
+  void _syncEpisodeFromStreamUrl(String streamUrl) {
+    final match = RegExp(r'/tv/\d+/(\d+)/(\d+)').firstMatch(streamUrl);
+    if (match == null) {
+      return;
+    }
+    final season = int.tryParse(match.group(1) ?? '');
+    final episode = int.tryParse(match.group(2) ?? '');
+    if (season == null || season < 1 || episode == null || episode < 1) {
+      return;
+    }
+    // Trust the URL as source of truth; avoid clamping against potentially
+    // incomplete season metadata (e.g. when opened from Continue Watching).
+    _currentSeason = season;
+    _currentEpisode = episode;
+  }
+
+  Future<String> _resolveVideasyM3u8Link(String videasyLink) async {
+    final normalizedUrl = _withResolutionCacheBuster(
+      _normalizeVideasyUrl(videasyLink),
+    );
+    if (_isM3u8Url(normalizedUrl)) {
+      return normalizedUrl;
+    }
+
+    final previousCompleter = _m3u8Completer;
+    if (previousCompleter != null && !previousCompleter.isCompleted) {
+      previousCompleter.completeError(
+        StateError('Superseded by a newer playback request.'),
+      );
+    }
+
+    final completer = Completer<String>();
+    _m3u8Completer = completer;
+
+    await _resetWebViewSession();
+    await _controller.loadRequest(Uri.parse(normalizedUrl));
+
+    return completer.future.timeout(
+      const Duration(seconds: 45),
+      onTimeout: () {
+        _m3u8Completer = null;
+        throw TimeoutException('Timed out waiting for a Videasy HLS manifest.');
+      },
+    );
+  }
+
+  Future<void> _resetWebViewSession() async {
+    try {
+      await _controller.clearCache();
+    } catch (_) {}
+
+    try {
+      await _controller.clearLocalStorage();
+    } catch (_) {}
+
+    try {
+      await _cookieManager.clearCookies();
+    } catch (_) {}
+  }
+
+  Future<void> _stopOldController(WebViewController controller) async {
+    try {
+      await controller.loadHtmlString(
+        '<html><body style="margin:0;background:#000"></body></html>',
+      );
+    } catch (_) {}
+  }
+
+  Future<String> _selectPlaybackQualityUrl(String m3u8Url) async {
+    final client = http.Client();
+    try {
+      final playlistUrl = Uri.parse(m3u8Url);
+      final playlist = await _fetchText(client, playlistUrl);
+      final qualities = _parseStreamQualities(playlist, playlistUrl);
+      final selectedUrl = _selectedQualityUrl;
+      final selectedLabel = _selectedQualityLabel;
+      final qualityByUrl = selectedUrl == null
+          ? null
+          : _findQuality(qualities, (quality) => quality.url == selectedUrl);
+      final qualityByLabel = selectedLabel == null
+          ? null
+          : _findQuality(
+              qualities,
+              (quality) => quality.label == selectedLabel,
+            );
+      final effectiveQuality =
+          qualityByUrl ??
+          qualityByLabel ??
+          (qualities.isEmpty ? null : qualities.first);
+      final effectiveUrl = effectiveQuality?.url ?? m3u8Url;
+
+      if (mounted) {
+        setState(() {
+          if (qualities.isNotEmpty) {
+            _availableQualities = qualities;
+          }
+          _selectedQualityUrl = effectiveQuality?.url ?? effectiveUrl;
+          _selectedQualityLabel = selectedLabel == null
+              ? null
+              : effectiveQuality?.label ?? selectedLabel;
+        });
+      } else {
+        if (qualities.isNotEmpty) {
+          _availableQualities = qualities;
+        }
+        _selectedQualityUrl = effectiveQuality?.url ?? effectiveUrl;
+        _selectedQualityLabel = selectedLabel == null
+            ? null
+            : effectiveQuality?.label ?? selectedLabel;
+      }
+
+      return effectiveUrl;
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _availableQualities = const [];
+          _selectedQualityUrl = null;
+          _selectedQualityLabel = null;
+        });
+      }
+      return m3u8Url;
+    } finally {
+      client.close();
+    }
+  }
+
+  _StreamQuality? _findQuality(
+    List<_StreamQuality> qualities,
+    bool Function(_StreamQuality quality) test,
+  ) {
+    for (final quality in qualities) {
+      if (test(quality)) {
+        return quality;
+      }
+    }
+    return null;
+  }
+
+  List<_StreamQuality> _parseStreamQualities(String playlist, Uri baseUrl) {
+    final lines = playlist.split(RegExp(r'\r?\n'));
+    final qualities = <_StreamQuality>[];
+
+    for (var i = 0; i < lines.length; i += 1) {
+      final line = lines[i].trim();
+      if (!line.startsWith('#EXT-X-STREAM-INF')) {
+        continue;
+      }
+
+      final bandwidth =
+          int.tryParse(
+            RegExp(r'BANDWIDTH=(\d+)').firstMatch(line)?.group(1) ?? '',
+          ) ??
+          0;
+      final resolution = RegExp(
+        r'RESOLUTION=(\d+x\d+)',
+      ).firstMatch(line)?.group(1);
+      final uriMatch = RegExp(r'URI="([^"]+)"').firstMatch(line);
+      String? child = uriMatch?.group(1);
+
+      if (child == null) {
+        for (var j = i + 1; j < lines.length; j += 1) {
+          final next = lines[j].trim();
+          if (next.isEmpty) {
+            continue;
+          }
+          if (next.startsWith('#')) {
+            break;
+          }
+          child = next;
+          break;
+        }
+      }
+
+      if (child == null) {
+        continue;
+      }
+
+      final label = resolution != null
+          ? '${resolution.split('x').last}p'
+          : bandwidth > 0
+          ? '${(bandwidth / 1000000).toStringAsFixed(1)} Mbps'
+          : 'Variant ${qualities.length + 1}';
+
+      qualities.add(
+        _StreamQuality(
+          label: label,
+          url: baseUrl.resolve(child).toString(),
+          bandwidth: bandwidth,
+        ),
+      );
+    }
+
+    qualities.sort((a, b) => b.bandwidth.compareTo(a.bandwidth));
+    final seenLabels = <String, int>{};
+    return qualities.map((quality) {
+      final count = (seenLabels[quality.label] ?? 0) + 1;
+      seenLabels[quality.label] = count;
+      if (count == 1) {
+        return quality;
+      }
+      return quality.copyWith(label: '${quality.label} #$count');
+    }).toList();
+  }
+
+  Future<void> _changeQuality(String? qualityUrl) async {
+    if (qualityUrl == _selectedQualityUrl) {
+      return;
+    }
+    final quality = _findQuality(
+      _availableQualities,
+      (quality) => quality.url == qualityUrl,
+    );
+    setState(() {
+      _selectedQualityUrl = qualityUrl;
+      _selectedQualityLabel = quality?.label;
+      _resolvedM3u8Url = null;
+    });
+    await _resolveAndLoadPlayer();
+  }
+
+  void _changeSource(String source) {
+    if (source == _selectedSource) {
+      return;
+    }
+    setState(() {
+      _selectedSource = source;
+      _selectedQualityUrl = null;
+      _selectedQualityLabel = null;
+      _availableQualities = const [];
+    });
+    unawaited(_resolveAndLoadPlayer());
+  }
+
+  void _changeSeason(int season) {
+    _loadEpisode(season: season, episode: 1);
+  }
+
+  void _changeEpisode(int episode) {
+    _loadEpisode(season: _currentSeason, episode: episode);
+  }
+
+  String _seasonLabel(CatalogSeason season) {
+    if (season.seasonNumber == 0) {
+      return season.name ?? 'Specials';
+    }
+    return season.name ?? 'Season ${season.seasonNumber}';
+  }
+
+  Future<void> _showPlaybackOptions() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: const Color(0xFF10161F),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, _) {
+            return SafeArea(
+              top: false,
+              child: ListView(
+                shrinkWrap: true,
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                children: [
+                  Text(
+                    'Playback options',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  if (_isTv) ...[
+                    DropdownButtonFormField<int>(
+                      initialValue: _currentSeason,
+                      decoration: const InputDecoration(
+                        labelText: 'Season',
+                        prefixIcon: Icon(Icons.video_library_rounded),
+                      ),
+                      items: [
+                        for (final season in _selectableSeasons)
+                          DropdownMenuItem<int>(
+                            value: season.seasonNumber,
+                            child: Text(_seasonLabel(season)),
+                          ),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) {
+                          return;
+                        }
+                        Navigator.of(sheetContext).pop();
+                        _changeSeason(value);
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<int>(
+                      initialValue: _currentEpisode,
+                      decoration: const InputDecoration(
+                        labelText: 'Episode',
+                        prefixIcon: Icon(Icons.tv_rounded),
+                      ),
+                      items: [
+                        for (var i = 1; i <= _episodeCount; i += 1)
+                          DropdownMenuItem<int>(
+                            value: i,
+                            child: Text('Episode $i'),
+                          ),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) {
+                          return;
+                        }
+                        Navigator.of(sheetContext).pop();
+                        _changeEpisode(value);
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  DropdownButtonFormField<String>(
+                    initialValue: _selectedSource,
+                    decoration: const InputDecoration(
+                      labelText: 'Source',
+                      prefixIcon: Icon(Icons.cloud_rounded),
+                    ),
+                    items: [
+                      for (final source in _sourceOptions)
+                        DropdownMenuItem<String>(
+                          value: source,
+                          child: Text(source),
+                        ),
+                    ],
+                    onChanged: (value) {
+                      if (value == null) {
+                        return;
+                      }
+                      Navigator.of(sheetContext).pop();
+                      _changeSource(value);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: _qualityDropdownValue,
+                    decoration: const InputDecoration(
+                      labelText: 'Quality',
+                      prefixIcon: Icon(Icons.high_quality_rounded),
+                    ),
+                    items: _availableQualities.isEmpty
+                        ? const [
+                            DropdownMenuItem<String>(
+                              value: 'auto',
+                              child: Text('Auto'),
+                            ),
+                          ]
+                        : [
+                            for (final quality in _availableQualities)
+                              DropdownMenuItem<String>(
+                                value: quality.url,
+                                child: Text(quality.label),
+                              ),
+                          ],
+                    onChanged: (value) {
+                      if (value == null) {
+                        return;
+                      }
+                      Navigator.of(sheetContext).pop();
+                      unawaited(_changeQuality(value == 'auto' ? null : value));
+                    },
+                  ),
+                  const SizedBox(height: 18),
+                  FilledButton.icon(
+                    onPressed: _resolvedM3u8Url == null || _isDownloading
+                        ? null
+                        : () {
+                            Navigator.of(sheetContext).pop();
+                            unawaited(_downloadCurrentStream());
+                          },
+                    icon: _isDownloading
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.download_rounded),
+                    label: Text(_isDownloading ? 'Downloading' : 'Download'),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  String get _qualityDropdownValue {
+    if (_availableQualities.isEmpty) {
+      return 'auto';
+    }
+    final selectedQualityUrl = _selectedQualityUrl;
+    if (_availableQualities.any(
+      (quality) => quality.url == selectedQualityUrl,
+    )) {
+      return selectedQualityUrl!;
+    }
+    final selectedQualityLabel = _selectedQualityLabel;
+    if (selectedQualityLabel != null) {
+      final selectedQuality = _findQuality(
+        _availableQualities,
+        (quality) => quality.label == selectedQualityLabel,
+      );
+      if (selectedQuality != null) {
+        return selectedQuality.url;
+      }
+    }
+    return _availableQualities.first.url;
+  }
+
+  String _normalizeVideasyUrl(String input) {
+    final uri = Uri.parse(input.trim());
+    if (uri.scheme != 'https') {
+      throw const FormatException('Only HTTPS Videasy links are supported.');
+    }
+
+    if (_isM3u8Url(uri.toString())) {
+      return uri.removeFragment().toString();
+    }
+
+    final host = uri.host.toLowerCase();
+    if (host != 'player.videasy.net' &&
+        host != 'videasy.net' &&
+        host != 'www.videasy.net') {
+      throw FormatException('Unsupported Videasy host: ${uri.host}.');
+    }
+
+    if (host == 'videasy.net' || host == 'www.videasy.net') {
+      final path = uri.path.replaceFirst(RegExp(r'^/+'), '');
+      if (!path.startsWith('movie/') && !path.startsWith('tv/')) {
+        throw const FormatException(
+          'Videasy links must start with /movie/... or /tv/...',
+        );
+      }
+      return Uri.https(
+        'player.videasy.net',
+        '/$path',
+        uri.queryParameters,
+      ).toString();
+    }
+
+    if (!uri.path.startsWith('/movie/') &&
+        !uri.path.startsWith('/tv/') &&
+        !uri.path.startsWith('/anime/')) {
+      throw const FormatException('Unsupported Videasy player path.');
+    }
+
+    return uri.removeFragment().toString();
+  }
+
+  bool _isM3u8Url(String value) {
+    final uri = Uri.tryParse(value);
+    if (uri == null) {
+      return false;
+    }
+    return RegExp(
+      r'\.m3u8(?:[?#]|$)',
+      caseSensitive: false,
+    ).hasMatch('${uri.path}?${uri.query}');
+  }
+
+  String _withResolutionCacheBuster(String value) {
+    if (_isM3u8Url(value)) {
+      return value;
+    }
+
+    final uri = Uri.parse(value);
+    final queryParameters = Map<String, String>.from(uri.queryParameters);
+    queryParameters['_impactstreamResolve'] = DateTime.now()
+        .microsecondsSinceEpoch
+        .toString();
+    return uri.replace(queryParameters: queryParameters).toString();
+  }
+
+  void _handleM3u8Message(JavaScriptMessage message) {
+    final raw = message.message;
+    final newlineIndex = raw.indexOf('\n');
+    if (newlineIndex < 0) {
+      return;
+    }
+
+    final token = int.tryParse(raw.substring(0, newlineIndex).trim());
+    if (token == null || token != _playbackResolveToken) {
+      return;
+    }
+
+    final url = raw.substring(newlineIndex + 1).trim();
+    if (!_isM3u8Url(url)) {
+      return;
+    }
+
+    final completer = _m3u8Completer;
+    if (completer == null || completer.isCompleted) {
+      return;
+    }
+
+    _m3u8Completer = null;
+    completer.complete(Uri.parse(url).removeFragment().toString());
+  }
+
+  Future<void> _installClientSideM3u8Capture() async {
+    final preferredSource = _selectedSource == 'Auto' ? null : _selectedSource;
+    final encodedPreferredSource = jsonEncode(preferredSource);
+    final encodedPreferredQuality = jsonEncode(_selectedQualityLabel);
+    final resolveToken = _playbackResolveToken;
+    final js =
+        r"""(function(){
+      const resolveToken = __RESOLVE_TOKEN__;
+      const preferredSource = __PREFERRED_SOURCE__;
+      const preferredQuality = __PREFERRED_QUALITY__;
+      const captureStartedAt = Date.now();
+      let sourceReady = !preferredSource;
+      let qualityReady = !preferredQuality;
+
+      const m3u8Pattern = /\.m3u8(?:[?#]|$)/i;
+      const postM3u8 = function(value) {
+        try {
+          if (!value || typeof value !== 'string' || !m3u8Pattern.test(value)) {
+            return;
+          }
+          if ((!sourceReady || !qualityReady) && Date.now() - captureStartedAt < 7000) {
+            return;
+          }
+          const url = new URL(value, window.location.href);
+          ImpactstreamM3u8.postMessage(resolveToken + '\n' + url.href.split('#')[0]);
+        } catch (_) {}
+      };
+
+      const originalFetch = window.fetch;
+      if (typeof originalFetch === 'function') {
+        window.fetch = function() {
+          try {
+            const first = arguments[0];
+            postM3u8(typeof first === 'string' ? first : first && first.url);
+          } catch (_) {}
+          return originalFetch.apply(this, arguments).then(function(response) {
+            try { postM3u8(response && response.url); } catch (_) {}
+            return response;
+          });
+        };
+      }
+
+      const originalOpen = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function(method, url) {
+        try { postM3u8(url); } catch (_) {}
+        this.addEventListener('load', function() {
+          try { postM3u8(this.responseURL); } catch (_) {}
+        });
+        return originalOpen.apply(this, arguments);
+      };
+
+      const scanPerformanceEntries = function() {
+        try {
+          const entries = performance.getEntriesByType('resource') || [];
+          for (const entry of entries) {
+            postM3u8(entry && entry.name);
+          }
+        } catch (_) {}
+      };
+
+      try {
+        const observer = new PerformanceObserver(function(list) {
+          for (const entry of list.getEntries()) {
+            postM3u8(entry && entry.name);
+          }
+        });
+        observer.observe({ entryTypes: ['resource'] });
+      } catch (_) {}
+
+      function findPlayButton(){
+        try{
+          const buttons = Array.from(document.querySelectorAll('button'));
+          return buttons.find(function(button) {
+            const path = button.querySelector('path');
+            return path && path.getAttribute('d') === 'M8 5v14l11-7z';
+          }) || null;
+        }catch(_){return null;}
+      }
+
+      function clickPosterOrPlay(){
+        try {
+          const poster = document.querySelector('div.fixed.inset-0.bg-black');
+          if (poster) {
+            poster.click();
+            return;
+          }
+        } catch (_) {}
+
+        try {
+          const play = findPlayButton();
+          if (play) {
+            play.click();
+            return;
+          }
+        } catch (_) {}
+
+        try {
+          document.body.click();
+        } catch (_) {}
+      }
+
+      function findSettingsButton(){
+        try {
+          const buttons = Array.from(document.querySelectorAll('button'));
+          return buttons.find(function(button) {
+            return button.querySelector('path[d*="M19.43 12.98"]');
+          }) || null;
+        } catch (_) {
+          return null;
+        }
+      }
+
+      function clickTabByName(name){
+        try {
+          const target = String(name).toLowerCase();
+          const tabs = Array.from(document.querySelectorAll('button, [role="tab"]'));
+          for (const tab of tabs) {
+            const text = (tab.innerText || '').trim().toLowerCase();
+            const controls = (tab.getAttribute('aria-controls') || '').toLowerCase();
+            if (text === target || controls.includes(target)) {
+              tab.click();
+              return true;
+            }
+          }
+        } catch (_) {}
+        return false;
+      }
+
+      function clickPreferredSource(){
+        if (!preferredSource) return;
+        try {
+          const sourceName = String(preferredSource).toLowerCase();
+          const buttons = Array.from(document.querySelectorAll('button'));
+          for (const button of buttons) {
+            const gearPath = button.querySelector('path[d*="M19.43 12.98"]');
+            if (gearPath) {
+              button.click();
+              break;
+            }
+          }
+
+          setTimeout(function() {
+            const tabs = Array.from(document.querySelectorAll('button, [role="tab"]'));
+            for (const tab of tabs) {
+              const text = (tab.innerText || '').trim().toLowerCase();
+              const controls = (tab.getAttribute('aria-controls') || '').toLowerCase();
+              if (text === 'servers' || controls.includes('servers')) {
+                tab.click();
+                break;
+              }
+            }
+          }, 250);
+
+          setTimeout(function(){
+            const serverPanel = document.querySelector('[role="tabpanel"][id*="Servers"]:not([hidden])') ||
+              document.querySelector('[role="tabpanel"][aria-labelledby*="Servers"]:not([hidden])') ||
+              document;
+            const candidates = Array.from(serverPanel.querySelectorAll('button'));
+            for (const button of candidates) {
+              const text = (button.innerText || '').toLowerCase();
+              const primaryText = text.split('\n')[0].trim();
+              if (primaryText === sourceName || text.includes(sourceName)) {
+                button.click();
+                sourceReady = true;
+                return;
+              }
+            }
+            sourceReady = true;
+          }, 650);
+        } catch (_) {}
+      }
+
+      function clickPreferredQuality(){
+        if (!preferredQuality) return;
+        try {
+          const settings = findSettingsButton();
+          if (settings) {
+            settings.click();
+          }
+
+          setTimeout(function() {
+            clickTabByName('quality');
+          }, 200);
+
+          setTimeout(function() {
+            const qualityName = String(preferredQuality).toLowerCase();
+            const qualityPanel = document.querySelector('[role="tabpanel"][id*="Quality"]:not([hidden])') ||
+              document.querySelector('[role="tabpanel"][aria-labelledby*="Quality"]:not([hidden])') ||
+              document;
+            const candidates = Array.from(qualityPanel.querySelectorAll('button'));
+            for (const button of candidates) {
+              const text = (button.innerText || '').toLowerCase();
+              const primaryText = text.split('\n')[0].trim();
+              if (primaryText === qualityName || text.includes(qualityName)) {
+                button.click();
+                qualityReady = true;
+                return;
+              }
+            }
+            qualityReady = true;
+          }, 500);
+        } catch (_) {
+          qualityReady = true;
+        }
+      }
+
+      scanPerformanceEntries();
+      setInterval(scanPerformanceEntries, 250);
+      setTimeout(clickPosterOrPlay, 250);
+      setTimeout(clickPosterOrPlay, 1000);
+      setTimeout(clickPreferredSource, 1300);
+      setTimeout(clickPreferredQuality, preferredSource ? 2300 : 1300);
+      setTimeout(clickPosterOrPlay, 3200);
+    })();"""
+            .replaceFirst('__RESOLVE_TOKEN__', '$resolveToken')
+            .replaceFirst('__PREFERRED_SOURCE__', encodedPreferredSource)
+            .replaceFirst('__PREFERRED_QUALITY__', encodedPreferredQuality);
+
+    try {
+      await _controller.runJavaScript(js);
+    } catch (_) {}
+  }
+
+  Future<void> _loadMediaPlayer(String m3u8Url) async {
+    final savedProgress = widget.watchProgressController?.getProgress(
+      tmdbId: widget.tmdbId,
+      tmdbType: widget.tmdbType,
+      season: _isTv ? _currentSeason : null,
+      episode: _isTv ? _currentEpisode : null,
+    );
+    final startPosition =
+        (savedProgress != null && !savedProgress.isCompleted)
+            ? savedProgress.positionSeconds
+            : 0.0;
+
+    await _controller.loadHtmlString(
+      buildCustomVideoPlayerHtml(m3u8Url, startPosition: startPosition),
+      baseUrl: 'https://player.videasy.net/',
+    );
+  }
+
+  Future<void> _downloadCurrentStream() async {
+    if (_isDownloading || _isResolving) {
+      return;
+    }
+
+    setState(() {
+      _isDownloading = true;
+      _downloadProgress = 0;
+      _downloadStatus = 'Preparing download';
+    });
+
+    try {
+      final m3u8Url =
+          _resolvedM3u8Url ??
+          await _resolveVideasyM3u8Link(_currentStreamUrl ?? widget.streamUrl);
+      final file = await _downloadHlsStream(m3u8Url);
+      final now = DateTime.now();
+      await _downloadsRepository.addDownload(
+        DownloadedMedia(
+          id: '${widget.tmdbType}:${widget.tmdbId}:${now.microsecondsSinceEpoch}',
+          title: widget.title,
+          filePath: file.path,
+          sizeBytes: await _downloadsRepository.downloadSizeBytes(file),
+          createdAt: now,
+          tmdbId: widget.tmdbId,
+          tmdbType: widget.tmdbType,
+          season: _isTv ? _currentSeason : null,
+          episode: _isTv ? _currentEpisode : null,
+        ),
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isDownloading = false;
+        _downloadProgress = 1;
+        _downloadStatus = 'Saved to ${file.path}';
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Download saved to ${file.path}')));
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isDownloading = false;
+        _downloadStatus = 'Download failed: $error';
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Download failed: $error')));
+    }
+  }
+
+  Future<File> _downloadHlsStream(String m3u8Url) async {
+    final client = http.Client();
+    try {
+      var playlistUrl = Uri.parse(m3u8Url);
+      var playlist = await _fetchText(client, playlistUrl);
+
+      final variantUrl = _bestVariantPlaylistUrl(playlist, playlistUrl);
+      if (variantUrl != null) {
+        playlistUrl = variantUrl;
+        playlist = await _fetchText(client, playlistUrl);
+      }
+
+      if (playlist.contains('#EXT-X-KEY')) {
+        throw const FormatException(
+          'Encrypted HLS downloads are not supported yet.',
+        );
+      }
+
+      final segmentUrls = _playlistMediaUrls(playlist, playlistUrl);
+      if (segmentUrls.isEmpty) {
+        throw const FormatException('No media segments found in HLS playlist.');
+      }
+
+      final directory = await _downloadsDirectory();
+      await directory.create(recursive: true);
+      final downloadDirectory = await _uniqueDownloadDirectory(directory);
+      await downloadDirectory.create(recursive: true);
+      final localPlaylist = File('${downloadDirectory.path}/index.m3u8');
+      final rewrittenLines = <String>[];
+      var mediaIndex = 0;
+
+      for (final rawLine in playlist.split(RegExp(r'\r?\n'))) {
+        final line = rawLine.trim();
+        if (line.startsWith('#EXT-X-MAP')) {
+          final rewrittenMapLine = await _downloadAndRewriteMapLine(
+            client,
+            line,
+            playlistUrl,
+            downloadDirectory,
+          );
+          rewrittenLines.add(rewrittenMapLine);
+          continue;
+        }
+
+        if (line.isEmpty || line.startsWith('#')) {
+          rewrittenLines.add(rawLine);
+          continue;
+        }
+
+        final segmentUrl = playlistUrl.resolve(line);
+        final segmentName = _localSegmentName(segmentUrl, mediaIndex);
+        final segmentFile = File('${downloadDirectory.path}/$segmentName');
+        if (mounted) {
+          setState(() {
+            _downloadProgress = mediaIndex / segmentUrls.length;
+            _downloadStatus =
+                'Downloading segment ${mediaIndex + 1}/${segmentUrls.length}';
+          });
+        }
+        await _writeResponseFile(client, segmentUrl, segmentFile);
+        rewrittenLines.add(segmentName);
+        mediaIndex += 1;
+      }
+
+      await localPlaylist.writeAsString(rewrittenLines.join('\n'), flush: true);
+
+      if (mounted) {
+        setState(() {
+          _downloadProgress = 1;
+          _downloadStatus = 'Download complete';
+        });
+      }
+
+      return localPlaylist;
+    } finally {
+      client.close();
+    }
+  }
+
+  Future<String> _fetchText(http.Client client, Uri uri) async {
+    final response = await client.get(uri, headers: _videasyHeaders);
+    if (response.statusCode < 200 || response.statusCode >= 400) {
+      throw HttpException(
+        'Playlist request failed with ${response.statusCode}.',
+        uri: uri,
+      );
+    }
+    final body = response.body.trimLeft();
+    if (!body.startsWith('#EXTM3U')) {
+      throw FormatException('Expected an HLS playlist from $uri.');
+    }
+    return response.body;
+  }
+
+  Future<void> _writeResponseBody(
+    http.Client client,
+    Uri uri,
+    IOSink sink,
+  ) async {
+    final request = http.Request('GET', uri)..headers.addAll(_videasyHeaders);
+    final response = await client.send(request);
+    if (response.statusCode < 200 || response.statusCode >= 400) {
+      throw HttpException(
+        'Segment request failed with ${response.statusCode}.',
+        uri: uri,
+      );
+    }
+    await for (final chunk in response.stream) {
+      sink.add(chunk);
+    }
+  }
+
+  Future<void> _writeResponseFile(
+    http.Client client,
+    Uri uri,
+    File file,
+  ) async {
+    final sink = file.openWrite();
+    try {
+      await _writeResponseBody(client, uri, sink);
+    } finally {
+      await sink.close();
+    }
+  }
+
+  Future<String> _downloadAndRewriteMapLine(
+    http.Client client,
+    String line,
+    Uri playlistUrl,
+    Directory directory,
+  ) async {
+    final match = RegExp(r'URI="([^"]+)"').firstMatch(line);
+    if (match == null) {
+      return line;
+    }
+
+    final mapUrl = playlistUrl.resolve(match.group(1)!);
+    final mapName = 'init${_extensionForUri(mapUrl, fallback: '.mp4')}';
+    await _writeResponseFile(
+      client,
+      mapUrl,
+      File('${directory.path}/$mapName'),
+    );
+    return line.replaceFirst(match.group(0)!, 'URI="$mapName"');
+  }
+
+  Uri? _bestVariantPlaylistUrl(String playlist, Uri baseUrl) {
+    final lines = playlist.split(RegExp(r'\r?\n'));
+    Uri? bestUrl;
+    var bestBandwidth = -1;
+
+    for (var i = 0; i < lines.length; i += 1) {
+      final line = lines[i].trim();
+      if (!line.startsWith('#EXT-X-STREAM-INF')) {
+        continue;
+      }
+
+      final bandwidthMatch = RegExp(r'BANDWIDTH=(\d+)').firstMatch(line);
+      final bandwidth = int.tryParse(bandwidthMatch?.group(1) ?? '') ?? 0;
+      final uriMatch = RegExp(r'URI="([^"]+)"').firstMatch(line);
+      String? child = uriMatch?.group(1);
+
+      if (child == null) {
+        for (var j = i + 1; j < lines.length; j += 1) {
+          final next = lines[j].trim();
+          if (next.isEmpty) {
+            continue;
+          }
+          if (next.startsWith('#')) {
+            break;
+          }
+          child = next;
+          break;
+        }
+      }
+
+      if (child != null && bandwidth >= bestBandwidth) {
+        bestBandwidth = bandwidth;
+        bestUrl = baseUrl.resolve(child);
+      }
+    }
+
+    return bestUrl;
+  }
+
+  List<Uri> _playlistMediaUrls(String playlist, Uri baseUrl) {
+    return playlist
+        .split(RegExp(r'\r?\n'))
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty && !line.startsWith('#'))
+        .map(baseUrl.resolve)
+        .toList();
+  }
+
+  Future<Directory> _downloadsDirectory() async {
+    return _downloadsRepository.downloadsDirectory();
+  }
+
+  Future<Directory> _uniqueDownloadDirectory(Directory directory) async {
+    final baseName = _downloadBaseName();
+    var candidate = Directory('${directory.path}/$baseName');
+    var counter = 2;
+    while (await candidate.exists()) {
+      candidate = Directory('${directory.path}/$baseName-$counter');
+      counter += 1;
+    }
+    return candidate;
+  }
+
+  String _localSegmentName(Uri uri, int index) {
+    return 'segment_${index.toString().padLeft(5, '0')}${_extensionForUri(uri, fallback: '.ts')}';
+  }
+
+  String _extensionForUri(Uri uri, {required String fallback}) {
+    final path = uri.path;
+    final lastSlash = path.lastIndexOf('/');
+    final filename = lastSlash >= 0 ? path.substring(lastSlash + 1) : path;
+    final dot = filename.lastIndexOf('.');
+    if (dot < 0 || dot == filename.length - 1) {
+      return fallback;
+    }
+    final extension = filename.substring(dot).toLowerCase();
+    if (extension.length > 8 || extension.contains(RegExp(r'[^a-z0-9.]'))) {
+      return fallback;
+    }
+    return extension;
+  }
+
+  String _downloadBaseName() {
+    final episodeSuffix = _isTv
+        ? ' S${_currentSeason.toString().padLeft(2, '0')}E${_currentEpisode.toString().padLeft(2, '0')}'
+        : '';
+    return '${widget.title}$episodeSuffix'
+        .replaceAll(RegExp(r'[\\/:*?"<>|]+'), '-')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
+  Map<String, String> get _videasyHeaders => const {
+    'User-Agent': 'Mozilla/5.0',
+    'Origin': 'https://player.videasy.net',
+    'Referer': 'https://player.videasy.net/',
+    'Accept': '*/*',
+  };
+
+  Future<void> _tearDownPlayer() async {
+    if (_isTearingDown) {
+      return;
+    }
+    _isTearingDown = true;
+    _saveCurrentProgress();
+
+    const teardownJs = """(function(){
+      try {
+        const videos = Array.from(document.querySelectorAll('video'));
+        for (const video of videos) {
+          try { video.pause(); } catch (_) {}
+          try { video.removeAttribute('src'); } catch (_) {}
+          try { video.load(); } catch (_) {}
+        }
+
+        const iframes = Array.from(document.querySelectorAll('iframe'));
+        for (const frame of iframes) {
+          try { frame.src = 'about:blank'; } catch (_) {}
+        }
+
+        try { window.stop(); } catch (_) {}
+      } catch (_) {}
+    })();""";
+
+    try {
+      await _controller.runJavaScript(teardownJs);
+    } catch (_) {}
+
+    try {
+      await _controller.loadHtmlString(
+        '<html><body style="margin:0;background:#000;"></body></html>',
+      );
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    unawaited(_tearDownPlayer());
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) {
+          unawaited(_tearDownPlayer());
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(widget.title),
+          actions: [
+            if (_isTv) ...[
+              IconButton(
+                tooltip: 'Previous episode',
+                onPressed: _isResolving || _currentEpisode <= 1
+                    ? null
+                    : () => _loadEpisode(
+                        season: _currentSeason,
+                        episode: _currentEpisode - 1,
+                      ),
+                icon: const Icon(Icons.skip_previous_rounded),
+              ),
+              IconButton(
+                tooltip: 'Next episode',
+                onPressed: _isResolving
+                    ? null
+                    : () => _loadEpisode(
+                        season: _currentSeason,
+                        episode: _currentEpisode + 1,
+                      ),
+                icon: const Icon(Icons.skip_next_rounded),
+              ),
+            ],
+            IconButton(
+              tooltip: 'More options',
+              onPressed: _isResolving ? null : _showPlaybackOptions,
+              icon: const Icon(Icons.more_vert_rounded),
+            ),
+          ],
+        ),
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            ColoredBox(
+              color: Colors.black,
+              child: WebViewWidget(
+                key: ValueKey(_playbackResolveToken),
+                controller: _controller,
+              ),
+            ),
+            if (_isResolving)
+              const ColoredBox(
+                color: Colors.black,
+                child: Center(child: CircularProgressIndicator()),
+              ),
+            if (!_isResolving &&
+                _playbackError == null &&
+                (_isDownloading || _downloadStatus != null))
+              Align(
+                alignment: Alignment.topCenter,
+                child: _DownloadProgressOverlay(
+                  isDownloading: _isDownloading,
+                  downloadProgress: _downloadProgress,
+                  downloadStatus: _downloadStatus,
+                ),
+              ),
+            if (_playbackError != null)
+              ColoredBox(
+                color: Colors.black,
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.error_outline_rounded,
+                          color: Colors.white70,
+                          size: 40,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Unable to resolve the video stream.',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _playbackError!,
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: Colors.white60),
+                        ),
+                        const SizedBox(height: 20),
+                        FilledButton.icon(
+                          onPressed: _resolveAndLoadPlayer,
+                          icon: const Icon(Icons.refresh_rounded),
+                          label: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DownloadProgressOverlay extends StatelessWidget {
+  const _DownloadProgressOverlay({
+    required this.isDownloading,
+    required this.downloadProgress,
+    required this.downloadStatus,
+  });
+
+  final bool isDownloading;
+  final double downloadProgress;
+  final String? downloadStatus;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.82)),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              LinearProgressIndicator(
+                value: isDownloading ? downloadProgress : 1,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                downloadStatus ?? '',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: Colors.white70),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StreamQuality {
+  const _StreamQuality({
+    required this.label,
+    required this.url,
+    required this.bandwidth,
+  });
+
+  final String label;
+  final String url;
+  final int bandwidth;
+
+  _StreamQuality copyWith({String? label}) {
+    return _StreamQuality(
+      label: label ?? this.label,
+      url: url,
+      bandwidth: bandwidth,
+    );
+  }
+}
