@@ -339,6 +339,9 @@ export default function AnimeDetailsPage() {
     };
   }, [anime, mediaId, animeType, seasonNumber, episodeNumber]);
 
+  const releaseDate = anime?.release_date || anime?.first_air_date || "Unknown";
+  const runtime = anime?.runtime || anime?.episode_run_time?.[0];
+
   const metadata = useMemo(() => {
     const base = [
       { label: "Release", value: releaseDate },
@@ -371,8 +374,6 @@ export default function AnimeDetailsPage() {
   if (!anime) return <div className="loading">Loading...</div>;
 
   const title = anime.title || anime.name || "Untitled";
-  const releaseDate = anime.release_date || anime.first_air_date || "Unknown";
-  const runtime = anime.runtime || anime.episode_run_time?.[0];
   const posterUrl = anime.poster_path
     ? `https://image.tmdb.org/t/p/w500${anime.poster_path}`
     : "/no-image.svg";
