@@ -1,4 +1,6 @@
 import { ReactNode } from "react";
+import type { DownloadRequest } from "../utils/videasyDownloader";
+import VideasyCustomPlayer, { type VideasyCustomPlayerContinueConfig } from "./VideasyCustomPlayer";
 
 type MetaItem = {
   label: string;
@@ -17,6 +19,11 @@ type MediaDetailShellProps = {
   controls?: ReactNode;
   actions?: ReactNode;
   infoNote?: ReactNode;
+  /** When set, plays Videasy in-page via client-side decode + HLS instead of an iframe. */
+  customPlayer?: {
+    videasyRequest: DownloadRequest;
+    continueWatching?: VideasyCustomPlayerContinueConfig | null;
+  };
 };
 
 export default function MediaDetailShell({
@@ -31,6 +38,7 @@ export default function MediaDetailShell({
   controls,
   actions,
   infoNote,
+  customPlayer,
 }: MediaDetailShellProps) {
   return (
     <div className="detail-shell">
@@ -44,14 +52,23 @@ export default function MediaDetailShell({
         </div>
 
         <div className="movie-player detail-player-frame">
-          <iframe
-            name="framez"
-            id="framez"
-            src={embedUrl}
-            allowFullScreen
-            allow="autoplay; fullscreen; picture-in-picture"
-            className="movie-iframe"
-          />
+          {customPlayer ? (
+            <VideasyCustomPlayer
+              title={title}
+              streamUrl={embedUrl}
+              videasyRequest={customPlayer.videasyRequest}
+              continueWatching={customPlayer.continueWatching ?? null}
+            />
+          ) : (
+            <iframe
+              name="framez"
+              id="framez"
+              src={embedUrl}
+              allowFullScreen
+              allow="autoplay; fullscreen; picture-in-picture"
+              className="movie-iframe"
+            />
+          )}
         </div>
 
         {controls ? <div className="detail-control-grid">{controls}</div> : null}

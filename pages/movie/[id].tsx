@@ -54,52 +54,6 @@ export default function MovieDetailsPage() {
   useEffect(() => {
     if (!id) return;
 
-    const storageId = Array.isArray(id) ? id[0] : id;
-    const storageKey = `continue:movie:${storageId}`;
-
-    const handleProgressMessage = (event: MessageEvent) => {
-      if (event.origin !== "https://player.videasy.net") return;
-
-      const payload =
-        typeof event.data === "string"
-          ? (() => {
-              try {
-                return JSON.parse(event.data);
-              } catch {
-                return null;
-              }
-            })()
-          : event.data;
-
-      if (!payload || payload.type !== "movie") return;
-      if (String(payload.id) !== storageId) return;
-
-      const timestamp = Math.max(0, Math.floor(Number(payload.timestamp || 0)));
-      const duration = Math.max(0, Math.floor(Number(payload.duration || 0)));
-      const progress = Math.max(0, Math.min(100, Number(payload.progress || 0)));
-
-      window.localStorage.setItem(
-        storageKey,
-        JSON.stringify({
-          timestamp,
-          duration,
-          progress,
-          updatedAt: new Date().toISOString(),
-          title: movie?.title || undefined,
-          posterPath: movie?.poster_path || undefined,
-          mediaType: "movie",
-          tmdbId: storageId,
-        })
-      );
-    };
-
-    window.addEventListener("message", handleProgressMessage);
-    return () => window.removeEventListener("message", handleProgressMessage);
-  }, [id, movie]);
-
-  useEffect(() => {
-    if (!id) return;
-
     const fetchDetails = async () => {
       const { data } = await axios.get(`https://api.themoviedb.org/3/movie/${id}`, {
         params: {
@@ -145,7 +99,47 @@ export default function MovieDetailsPage() {
     }
   }, [id, movie]);
 
-  const title = movie?.title || "Untitled";
+  const movieId = id ? (Array.isArray(id) ? id[0] : id) : "";
+
+  const movieQuery = useMemo(() => {
+    const q = new URLSearchParams({
+      color: "e50914",
+      nextEpisode: "true",
+      episodeSelector: "true",
+      overlay: "true",
+    });
+    if (resumeSeconds > 0) {
+      q.set("progress", String(resumeSeconds));
+    }
+    return q;
+  }, [resumeSeconds]);
+
+  const embedUrl =
+    movieId ? `https://player.videasy.net/movie/${movieId}?${movieQuery.toString()}` : "";
+
+  const customPlayer = useMemo(() => {
+    if (!movie || !movieId) return undefined;
+    const tmdbId = Number(movieId);
+    if (!Number.isFinite(tmdbId) || tmdbId <= 0) return undefined;
+    return {
+      videasyRequest: {
+        tmdbId,
+        mediaType: "movie" as const,
+        title: movie.title || "Untitled",
+        year: (movie.release_date || "").slice(0, 4),
+        imdbId: movie.imdb_id || "",
+      },
+      continueWatching: {
+        storageKey: `continue:movie:${movieId}`,
+        indexEntry: `movie:${movieId}`,
+        mode: "movie" as const,
+        tmdbId: String(movieId),
+        title: movie.title || "Untitled",
+        posterPath: movie.poster_path || null,
+      },
+    };
+  }, [movie, movieId]);
+
   const releaseDate = movie?.release_date || "Unknown";
   const posterUrl = movie?.poster_path
     ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
@@ -168,28 +162,16 @@ export default function MovieDetailsPage() {
     [movie?.genres]
   );
 
-  if (!movie) return <div className="loading">Loading...</div>;
-
-  const movieId = Array.isArray(id) ? id[0] : id;
-  const movieQuery = new URLSearchParams({
-    color: "e50914",
-    nextEpisode: "true",
-    episodeSelector: "true",
-    overlay: "true",
-  });
-  if (resumeSeconds > 0) {
-    movieQuery.set("progress", String(resumeSeconds));
-  }
-
   const handleDownload = async () => {
     const tmdbId = Number(Array.isArray(id) ? id[0] : id);
-    if (!tmdbId) return;
+    if (!tmdbId || !movie) return;
 
     try {
       setIsDownloading(true);
       setDownloadError("");
 
       const year = (movie.release_date || "").slice(0, 4);
+      const title = movie.title || "Untitled";
       const decoded = await fetchVideasyDownloadData({
         tmdbId,
         mediaType: "movie",
@@ -210,13 +192,18 @@ export default function MovieDetailsPage() {
     }
   };
 
+  if (!movie) return <div className="loading">Loading...</div>;
+
+  const title = movie.title || "Untitled";
+
   return (
     <>
       <MediaDetailShell
         mediaLabel="Movie"
         title={title}
         summary={movie.overview || "No overview is available for this title yet."}
-        embedUrl={`https://player.videasy.net/movie/${movieId}?${movieQuery.toString()}`}
+        embedUrl={embedUrl}
+        customPlayer={customPlayer}
         posterUrl={posterUrl}
         backdropUrl={backdropUrl}
         metadata={metadata}

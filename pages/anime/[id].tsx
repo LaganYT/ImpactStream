@@ -225,78 +225,6 @@ export default function AnimeDetailsPage() {
     const storageId = Array.isArray(id) ? id[0] : id;
     const storageKey = `continue:anime:${animeType}:${storageId}`;
 
-    const handleProgressMessage = (event: MessageEvent) => {
-      if (event.origin !== "https://player.videasy.net") return;
-
-      const payload =
-        typeof event.data === "string"
-          ? (() => {
-              try {
-                return JSON.parse(event.data);
-              } catch {
-                return null;
-              }
-            })()
-          : event.data;
-
-      if (!payload || payload.type !== animeType) return;
-      if (String(payload.id) !== storageId) return;
-
-      const payloadSeason = Number(payload.season);
-      const payloadEpisode = Number(payload.episode);
-      if (animeType === "tv" && payloadSeason > 0 && payloadEpisode > 0) {
-        if (payloadSeason !== seasonNumber) {
-          setSeasonNumber(payloadSeason);
-        }
-        if (payloadEpisode !== episodeNumber) {
-          setEpisodeNumber(payloadEpisode);
-        }
-      }
-
-      const timestamp = Math.max(0, Math.floor(Number(payload.timestamp || 0)));
-      const duration = Math.max(0, Math.floor(Number(payload.duration || 0)));
-      const progress = Math.max(0, Math.min(100, Number(payload.progress || 0)));
-      const nextSeason = animeType === "tv" && payloadSeason > 0 ? payloadSeason : 1;
-      const nextEpisode = animeType === "tv" && payloadEpisode > 0 ? payloadEpisode : 1;
-      const nextData = {
-        seasonNumber: nextSeason,
-        episodeNumber: nextEpisode,
-        timestamp,
-        duration,
-        progress,
-        updatedAt: new Date().toISOString(),
-        title: anime?.title || anime?.name || undefined,
-        posterPath: anime?.poster_path || undefined,
-        mediaType: `anime:${animeType}`,
-        tmdbId: storageId,
-      };
-
-      window.localStorage.setItem(
-        storageKey,
-        JSON.stringify(nextData)
-      );
-
-      const indexKey = "continueWatching:index";
-      const indexRaw = window.localStorage.getItem(indexKey);
-      const index: string[] = indexRaw ? JSON.parse(indexRaw) : [];
-      const entry = `anime:${animeType}:${storageId}`;
-      const filtered = index.filter((e) => e !== entry);
-      if (animeType === "movie" || shouldTrackContinueWatching(nextData)) {
-        filtered.unshift(entry);
-      }
-      window.localStorage.setItem(indexKey, JSON.stringify(filtered.slice(0, 50)));
-    };
-
-    window.addEventListener("message", handleProgressMessage);
-    return () => window.removeEventListener("message", handleProgressMessage);
-  }, [id, animeType, isProgressLoaded, seasonNumber, episodeNumber, anime]);
-
-  useEffect(() => {
-    if (!id || !isProgressLoaded) return;
-
-    const storageId = Array.isArray(id) ? id[0] : id;
-    const storageKey = `continue:anime:${animeType}:${storageId}`;
-
     try {
       const stored = window.localStorage.getItem(storageKey);
       if (!stored) {
@@ -328,19 +256,10 @@ export default function AnimeDetailsPage() {
     setSeasonNumber(value);
   };
 
-  const title = anime?.title || anime?.name || "Untitled";
-  const releaseDate = anime?.release_date || anime?.first_air_date || "Unknown";
-  const runtime = anime?.runtime || anime?.episode_run_time?.[0];
-  const posterUrl = anime?.poster_path
-    ? `https://image.tmdb.org/t/p/w500${anime.poster_path}`
-    : "/no-image.svg";
-  const backdropUrl = anime?.backdrop_path
-    ? `https://image.tmdb.org/t/p/original${anime.backdrop_path}`
-    : undefined;
+  const mediaId = id ? (Array.isArray(id) ? id[0] : id) : "";
 
   const streamUrl = useMemo(() => {
-    if (!id) return "";
-    const mediaId = Array.isArray(id) ? id[0] : id;
+    if (!mediaId) return "";
 
     if (animeType === "movie") {
       const query = new URLSearchParams({
@@ -367,7 +286,58 @@ export default function AnimeDetailsPage() {
       query.set("progress", String(resumeSeconds));
     }
     return `https://player.videasy.net/tv/${mediaId}/${seasonNumber}/${episodeNumber}?${query.toString()}`;
-  }, [id, animeType, seasonNumber, episodeNumber, resumeSeconds]);
+  }, [mediaId, animeType, seasonNumber, episodeNumber, resumeSeconds]);
+
+  const customPlayer = useMemo(() => {
+    if (!anime || !mediaId) return undefined;
+    const tmdbId = Number(mediaId);
+    if (!Number.isFinite(tmdbId) || tmdbId <= 0) return undefined;
+
+    if (animeType === "movie") {
+      return {
+        videasyRequest: {
+          tmdbId,
+          mediaType: "movie" as const,
+          title: anime.title || anime.name || "Untitled",
+          year: String(anime.release_date || anime.first_air_date || "").slice(0, 4),
+          imdbId: anime.external_ids?.imdb_id || anime.imdb_id || "",
+        },
+        continueWatching: {
+          storageKey: `continue:anime:movie:${mediaId}`,
+          indexEntry: `anime:movie:${mediaId}`,
+          mode: "animeMovie" as const,
+          tmdbId: String(mediaId),
+          title: anime.title || anime.name || "Untitled",
+          posterPath: anime.poster_path || null,
+        },
+      };
+    }
+
+    if (seasonNumber <= 0 || episodeNumber <= 0) return undefined;
+
+    return {
+      videasyRequest: {
+        tmdbId,
+        mediaType: "tv" as const,
+        title: anime.title || anime.name || "Untitled",
+        year: String(anime.first_air_date || anime.release_date || "").slice(0, 4),
+        seasonId: seasonNumber,
+        episodeId: episodeNumber,
+        totalSeasons: Number(anime.number_of_seasons || 0),
+        imdbId: anime.external_ids?.imdb_id || anime.imdb_id || "",
+      },
+      continueWatching: {
+        storageKey: `continue:anime:tv:${mediaId}`,
+        indexEntry: `anime:tv:${mediaId}`,
+        mode: "animeTv" as const,
+        tmdbId: String(mediaId),
+        title: anime.title || anime.name || "Untitled",
+        posterPath: anime.poster_path || null,
+        seasonNumber,
+        episodeNumber,
+      },
+    };
+  }, [anime, mediaId, animeType, seasonNumber, episodeNumber]);
 
   const metadata = useMemo(() => {
     const base = [
@@ -399,6 +369,16 @@ export default function AnimeDetailsPage() {
   );
 
   if (!anime) return <div className="loading">Loading...</div>;
+
+  const title = anime.title || anime.name || "Untitled";
+  const releaseDate = anime.release_date || anime.first_air_date || "Unknown";
+  const runtime = anime.runtime || anime.episode_run_time?.[0];
+  const posterUrl = anime.poster_path
+    ? `https://image.tmdb.org/t/p/w500${anime.poster_path}`
+    : "/no-image.svg";
+  const backdropUrl = anime.backdrop_path
+    ? `https://image.tmdb.org/t/p/original${anime.backdrop_path}`
+    : undefined;
 
   const handleDownload = async () => {
     const tmdbId = Number(Array.isArray(id) ? id[0] : id);
@@ -444,6 +424,7 @@ export default function AnimeDetailsPage() {
         title={title}
         summary={anime.overview || "No overview is available for this anime yet."}
         embedUrl={streamUrl}
+        customPlayer={customPlayer}
         posterUrl={posterUrl}
         backdropUrl={backdropUrl}
         metadata={metadata}

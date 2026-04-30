@@ -206,78 +206,6 @@ export default function TVDetailsPage() {
     const storageId = Array.isArray(id) ? id[0] : id;
     const storageKey = `continue:tv:${storageId}`;
 
-    const handleProgressMessage = (event: MessageEvent) => {
-      if (event.origin !== "https://player.videasy.net") return;
-
-      const payload =
-        typeof event.data === "string"
-          ? (() => {
-              try {
-                return JSON.parse(event.data);
-              } catch {
-                return null;
-              }
-            })()
-          : event.data;
-
-      if (!payload || payload.type !== "tv") return;
-      if (String(payload.id) !== storageId) return;
-
-      const payloadSeason = Number(payload.season);
-      const payloadEpisode = Number(payload.episode);
-      if (payloadSeason > 0 && payloadEpisode > 0) {
-        if (payloadSeason !== seasonNumber) {
-          setSeasonNumber(payloadSeason);
-        }
-        if (payloadEpisode !== episodeNumber) {
-          setEpisodeNumber(payloadEpisode);
-        }
-      }
-
-      const timestamp = Math.max(0, Math.floor(Number(payload.timestamp || 0)));
-      const duration = Math.max(0, Math.floor(Number(payload.duration || 0)));
-      const progress = Math.max(0, Math.min(100, Number(payload.progress || 0)));
-      const nextSeason = payloadSeason > 0 ? payloadSeason : seasonNumber;
-      const nextEpisode = payloadEpisode > 0 ? payloadEpisode : episodeNumber;
-      const nextData = {
-        seasonNumber: nextSeason,
-        episodeNumber: nextEpisode,
-        timestamp,
-        duration,
-        progress,
-        updatedAt: new Date().toISOString(),
-        title: tvShow?.name || undefined,
-        posterPath: tvShow?.poster_path || undefined,
-        mediaType: "tv",
-        tmdbId: storageId,
-      };
-
-      window.localStorage.setItem(
-        storageKey,
-        JSON.stringify(nextData)
-      );
-
-      const indexKey = "continueWatching:index";
-      const indexRaw = window.localStorage.getItem(indexKey);
-      const index: string[] = indexRaw ? JSON.parse(indexRaw) : [];
-      const entry = `tv:${storageId}`;
-      const filtered = index.filter((e) => e !== entry);
-      if (shouldTrackContinueWatching(nextData)) {
-        filtered.unshift(entry);
-      }
-      window.localStorage.setItem(indexKey, JSON.stringify(filtered.slice(0, 50)));
-    };
-
-    window.addEventListener("message", handleProgressMessage);
-    return () => window.removeEventListener("message", handleProgressMessage);
-  }, [id, isProgressLoaded, seasonNumber, episodeNumber, tvShow]);
-
-  useEffect(() => {
-    if (!id || !isProgressLoaded || seasonNumber <= 0 || episodeNumber <= 0) return;
-
-    const storageId = Array.isArray(id) ? id[0] : id;
-    const storageKey = `continue:tv:${storageId}`;
-
     try {
       const stored = window.localStorage.getItem(storageKey);
       if (!stored) {
@@ -306,7 +234,54 @@ export default function TVDetailsPage() {
     setSeasonNumber(value);
   };
 
-  const title = tvShow?.name || "Untitled";
+  const tvId = id ? (Array.isArray(id) ? id[0] : id) : "";
+
+  const tvQuery = useMemo(() => {
+    const q = new URLSearchParams({
+      color: "e50914",
+      autoplay: "true",
+      nextEpisode: "true",
+      autoplayNextEpisode: "true",
+      overlay: "true",
+    });
+    if (resumeSeconds > 0) {
+      q.set("progress", String(resumeSeconds));
+    }
+    return q;
+  }, [resumeSeconds]);
+
+  const embedUrl =
+    tvId && seasonNumber > 0 && episodeNumber > 0
+      ? `https://player.videasy.net/tv/${tvId}/${seasonNumber}/${episodeNumber}?${tvQuery.toString()}`
+      : "";
+
+  const customPlayer = useMemo(() => {
+    if (!tvShow || !tvId || seasonNumber <= 0 || episodeNumber <= 0) return undefined;
+    const tmdbId = Number(tvId);
+    if (!Number.isFinite(tmdbId) || tmdbId <= 0) return undefined;
+    return {
+      videasyRequest: {
+        tmdbId,
+        mediaType: "tv" as const,
+        title: tvShow.name || "Untitled",
+        year: (tvShow.first_air_date || "").slice(0, 4),
+        seasonId: seasonNumber,
+        episodeId: episodeNumber,
+        totalSeasons: Number(tvShow.number_of_seasons || 0),
+      },
+      continueWatching: {
+        storageKey: `continue:tv:${tvId}`,
+        indexEntry: `tv:${tvId}`,
+        mode: "tv" as const,
+        tmdbId: String(tvId),
+        title: tvShow.name || "Untitled",
+        posterPath: tvShow.poster_path || null,
+        seasonNumber,
+        episodeNumber,
+      },
+    };
+  }, [tvShow, tvId, seasonNumber, episodeNumber]);
+
   const releaseDate = tvShow?.first_air_date || "Unknown";
   const posterUrl = tvShow?.poster_path
     ? `https://image.tmdb.org/t/p/w500${tvShow.poster_path}`
@@ -331,17 +306,8 @@ export default function TVDetailsPage() {
   );
 
   if (!tvShow) return <div className="loading">Loading...</div>;
-  const tvId = Array.isArray(id) ? id[0] : id;
-  const tvQuery = new URLSearchParams({
-    color: "e50914",
-    autoplay: "true",
-    nextEpisode: "true",
-    autoplayNextEpisode: "true",
-    overlay: "true",
-  });
-  if (resumeSeconds > 0) {
-    tvQuery.set("progress", String(resumeSeconds));
-  }
+
+  const title = tvShow.name || "Untitled";
 
   const handleDownload = async () => {
     const tmdbId = Number(Array.isArray(id) ? id[0] : id);
@@ -383,7 +349,8 @@ export default function TVDetailsPage() {
         mediaLabel="Series"
         title={title}
         summary={tvShow.overview || "No overview is available for this series yet."}
-        embedUrl={`https://player.videasy.net/tv/${tvId}/${seasonNumber}/${episodeNumber}?${tvQuery.toString()}`}
+        embedUrl={embedUrl}
+        customPlayer={customPlayer}
         posterUrl={posterUrl}
         backdropUrl={backdropUrl}
         metadata={metadata}
