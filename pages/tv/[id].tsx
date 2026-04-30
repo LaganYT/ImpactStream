@@ -336,7 +336,6 @@ export default function TVDetailsPage() {
     color: "e50914",
     autoplay: "true",
     nextEpisode: "true",
-    episodeSelector: "true",
     autoplayNextEpisode: "true",
     overlay: "true",
   });

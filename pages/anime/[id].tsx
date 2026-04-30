@@ -347,7 +347,6 @@ export default function AnimeDetailsPage() {
         color: "e50914",
         autoplay: "true",
         nextEpisode: "true",
-        episodeSelector: "true",
         overlay: "true",
       });
       if (resumeSeconds > 0) {
