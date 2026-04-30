@@ -8,6 +8,7 @@ import {
 } from "../../utils/videasyDownloader";
 import MediaDetailShell from "../../components/MediaDetailShell";
 import DownloadModal from "../../components/DownloadModal";
+import CustomPlayer from "../../components/CustomPlayer";
 
 type MovieDetails = {
   title?: string;
@@ -171,15 +172,7 @@ export default function MovieDetailsPage() {
   if (!movie) return <div className="loading">Loading...</div>;
 
   const movieId = Array.isArray(id) ? id[0] : id;
-  const movieQuery = new URLSearchParams({
-    color: "e50914",
-    nextEpisode: "true",
-    episodeSelector: "true",
-    overlay: "true",
-  });
-  if (resumeSeconds > 0) {
-    movieQuery.set("progress", String(resumeSeconds));
-  }
+  const movieStreamUrl = `https://player.videasy.net/movie/${movieId}?color=e50914&nextEpisode=true&episodeSelector=true&overlay=true`;
 
   const handleDownload = async () => {
     const tmdbId = Number(Array.isArray(id) ? id[0] : id);
@@ -216,11 +209,20 @@ export default function MovieDetailsPage() {
         mediaLabel="Movie"
         title={title}
         summary={movie.overview || "No overview is available for this title yet."}
-        embedUrl={`https://player.videasy.net/movie/${movieId}?${movieQuery.toString()}`}
         posterUrl={posterUrl}
         backdropUrl={backdropUrl}
         metadata={metadata}
         tags={tags}
+        playerNode={
+          <CustomPlayer
+            title={title}
+            streamUrl={movieStreamUrl}
+            tmdbId={movieId ?? ""}
+            tmdbType="movie"
+            thumbnailUrl={movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : undefined}
+            startPosition={resumeSeconds}
+          />
+        }
         actions={
           <button onClick={handleDownload} disabled={isDownloading}>
             {isDownloading ? "Decoding..." : "Download"}

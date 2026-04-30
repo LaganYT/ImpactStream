@@ -8,6 +8,7 @@ import {
 } from "../../utils/videasyDownloader";
 import MediaDetailShell from "../../components/MediaDetailShell";
 import DownloadModal from "../../components/DownloadModal";
+import CustomPlayer, { CatalogSeason } from "../../components/CustomPlayer";
 
 type TVDetails = {
   name?: string;
@@ -332,16 +333,15 @@ export default function TVDetailsPage() {
 
   if (!tvShow) return <div className="loading">Loading...</div>;
   const tvId = Array.isArray(id) ? id[0] : id;
-  const tvQuery = new URLSearchParams({
-    color: "e50914",
-    autoplay: "true",
-    nextEpisode: "true",
-    autoplayNextEpisode: "true",
-    overlay: "true",
-  });
-  if (resumeSeconds > 0) {
-    tvQuery.set("progress", String(resumeSeconds));
-  }
+
+  const tvStreamUrl = `https://player.videasy.net/tv/${tvId}/${seasonNumber}/${episodeNumber}?color=e50914&autoplay=true&nextEpisode=true&autoplayNextEpisode=true&overlay=true`;
+
+  const catalogSeasons: CatalogSeason[] = tvShow.number_of_seasons
+    ? Array.from({ length: tvShow.number_of_seasons }, (_, i) => ({
+        seasonNumber: i + 1,
+        episodeCount: 0,
+      }))
+    : [];
 
   const handleDownload = async () => {
     const tmdbId = Number(Array.isArray(id) ? id[0] : id);
@@ -383,43 +383,33 @@ export default function TVDetailsPage() {
         mediaLabel="Series"
         title={title}
         summary={tvShow.overview || "No overview is available for this series yet."}
-        embedUrl={`https://player.videasy.net/tv/${tvId}/${seasonNumber}/${episodeNumber}?${tvQuery.toString()}`}
         posterUrl={posterUrl}
         backdropUrl={backdropUrl}
         metadata={metadata}
         tags={tags}
-        controls={
-          <>
-            <label className="detail-select-field">
-              <span>Season</span>
-              <select value={seasonNumber} onChange={(e) => handleSeasonChange(Number(e.target.value))}>
-                {Array.from({ length: tvShow.number_of_seasons || 0 }, (_, i) => i + 1).map((season) => (
-                  <option key={season} value={season}>
-                    Season {season}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="detail-select-field">
-              <span>Episode</span>
-              <select
-                value={episodeNumber}
-                onChange={(e) => setEpisodeNumber(Number(e.target.value))}
-                disabled={episodesCount === 0}
-              >
-                {Array.from({ length: episodesCount || 0 }, (_, i) => i + 1).map((episode) => (
-                  <option key={episode} value={episode}>
-                    Episode {episode}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <button onClick={handleDownload} disabled={isDownloading}>
-              {isDownloading ? "Decoding..." : "Download"}
-            </button>
-          </>
+        playerNode={
+          isProgressLoaded ? (
+            <CustomPlayer
+              title={title}
+              streamUrl={tvStreamUrl}
+              tmdbId={tvId ?? ""}
+              tmdbType="tv"
+              totalSeasons={tvShow.number_of_seasons}
+              totalEpisodes={tvShow.number_of_episodes}
+              seasons={catalogSeasons}
+              thumbnailUrl={tvShow.poster_path ? `https://image.tmdb.org/t/p/w500${tvShow.poster_path}` : undefined}
+              startPosition={resumeSeconds}
+              onProgress={({ positionSeconds }) => {
+                // Keep parent season/episode in sync for the download handler
+                // (CustomPlayer manages its own internal state).
+              }}
+            />
+          ) : null
+        }
+        actions={
+          <button onClick={handleDownload} disabled={isDownloading}>
+            {isDownloading ? "Decoding..." : "Download"}
+          </button>
         }
       />
 

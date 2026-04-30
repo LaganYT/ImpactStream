@@ -9,7 +9,10 @@ type MediaDetailShellProps = {
   mediaLabel: string;
   title: string;
   summary: string;
-  embedUrl: string;
+  /** Iframe embed URL — used when `playerNode` is not provided. */
+  embedUrl?: string;
+  /** Optional custom player element that replaces the default iframe. */
+  playerNode?: ReactNode;
   posterUrl: string;
   backdropUrl?: string;
   metadata: MetaItem[];
@@ -24,6 +27,7 @@ export default function MediaDetailShell({
   title,
   summary,
   embedUrl,
+  playerNode,
   posterUrl,
   backdropUrl,
   metadata,
@@ -44,14 +48,16 @@ export default function MediaDetailShell({
         </div>
 
         <div className="movie-player detail-player-frame">
-          <iframe
-            name="framez"
-            id="framez"
-            src={embedUrl}
-            allowFullScreen
-            allow="autoplay; fullscreen; picture-in-picture"
-            className="movie-iframe"
-          />
+          {playerNode ?? (
+            <iframe
+              name="framez"
+              id="framez"
+              src={embedUrl}
+              allowFullScreen
+              allow="autoplay; fullscreen; picture-in-picture"
+              className="movie-iframe"
+            />
+          )}
         </div>
 
         {controls ? <div className="detail-control-grid">{controls}</div> : null}
