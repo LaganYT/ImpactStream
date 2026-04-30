@@ -11,6 +11,8 @@ import {
   parseTvSeasonEpisodeFromUrl,
   pickSourceUrlByUiLabel,
   selectPlaybackQualityUrl,
+  shouldFallbackToVideasyEmbed,
+  VIDEASY_EMBED_FALLBACK_MESSAGE,
   withResolutionCacheBuster,
 } from "../lib/videasyPlayback";
 
@@ -24,6 +26,109 @@ export type VideasyCustomPlayerContinueConfig = {
   seasonNumber?: number;
   episodeNumber?: number;
 };
+
+function touchContinueWatchingIndex(indexEntry: string) {
+  try {
+    const indexKey = "continueWatching:index";
+    const indexRaw = window.localStorage.getItem(indexKey);
+    const index: string[] = indexRaw ? JSON.parse(indexRaw) : [];
+    const filtered = index.filter((e) => e !== indexEntry);
+    filtered.unshift(indexEntry);
+    window.localStorage.setItem(indexKey, JSON.stringify(filtered.slice(0, 50)));
+  } catch {
+    // ignore
+  }
+}
+
+function expectedVideasyPostMessageType(mode: VideasyCustomPlayerContinueConfig["mode"]): "movie" | "tv" {
+  return mode === "tv" || mode === "animeTv" ? "tv" : "movie";
+}
+
+function applyVideasyEmbedProgressMessage(
+  event: MessageEvent,
+  cfg: VideasyCustomPlayerContinueConfig
+): void {
+  if (event.origin !== "https://player.videasy.net") return;
+
+  const payload =
+    typeof event.data === "string"
+      ? (() => {
+          try {
+            return JSON.parse(event.data) as Record<string, unknown> | null;
+          } catch {
+            return null;
+          }
+        })()
+      : (event.data as Record<string, unknown> | null);
+
+  if (!payload || typeof payload !== "object") return;
+
+  const expectedType = expectedVideasyPostMessageType(cfg.mode);
+  if (payload.type !== expectedType) return;
+  if (String(payload.id) !== cfg.tmdbId) return;
+
+  const timestamp = Math.max(0, Math.floor(Number(payload.timestamp || 0)));
+  const duration = Math.max(0, Math.floor(Number(payload.duration || 0)));
+  const progress = Math.max(0, Math.min(100, Number(payload.progress || 0)));
+
+  try {
+    const existing = window.localStorage.getItem(cfg.storageKey);
+    const parsed = existing ? JSON.parse(existing) : {};
+
+    if (cfg.mode === "movie" || cfg.mode === "animeMovie") {
+      window.localStorage.setItem(
+        cfg.storageKey,
+        JSON.stringify({
+          ...parsed,
+          timestamp,
+          duration,
+          progress,
+          updatedAt: new Date().toISOString(),
+          title: cfg.title,
+          posterPath: cfg.posterPath ?? parsed.posterPath,
+          mediaType: cfg.mode === "animeMovie" ? "anime:movie" : "movie",
+          tmdbId: cfg.tmdbId,
+        })
+      );
+      touchContinueWatchingIndex(cfg.indexEntry);
+      return;
+    }
+
+    const payloadSeason = Number(payload.season);
+    const payloadEpisode = Number(payload.episode);
+    const seasonNumber =
+      Number.isFinite(payloadSeason) && payloadSeason > 0 ? payloadSeason : (cfg.seasonNumber ?? 1);
+    const episodeNumber =
+      Number.isFinite(payloadEpisode) && payloadEpisode > 0 ? payloadEpisode : (cfg.episodeNumber ?? 1);
+
+    window.localStorage.setItem(
+      cfg.storageKey,
+      JSON.stringify({
+        ...parsed,
+        seasonNumber,
+        episodeNumber,
+        timestamp,
+        duration,
+        progress,
+        updatedAt: new Date().toISOString(),
+        title: cfg.title,
+        posterPath: cfg.posterPath ?? parsed.posterPath,
+        mediaType: cfg.mode === "animeTv" ? "anime:tv" : "tv",
+        tmdbId: cfg.tmdbId,
+      })
+    );
+    const track =
+      timestamp > 0 ||
+      progress > 0 ||
+      seasonNumber !== 1 ||
+      episodeNumber !== 1;
+    if (track) {
+      touchContinueWatchingIndex(cfg.indexEntry);
+    }
+  } catch {
+    // ignore
+  }
+}
 
 type Props = {
   title: string;
@@ -57,19 +162,6 @@ function readResumeSeconds(
     return ts > 0 ? ts : 0;
   } catch {
     return 0;
-  }
-}
-
-function touchContinueWatchingIndex(indexEntry: string) {
-  try {
-    const indexKey = "continueWatching:index";
-    const indexRaw = window.localStorage.getItem(indexKey);
-    const index: string[] = indexRaw ? JSON.parse(indexRaw) : [];
-    const filtered = index.filter((e) => e !== indexEntry);
-    filtered.unshift(indexEntry);
-    window.localStorage.setItem(indexKey, JSON.stringify(filtered.slice(0, 50)));
-  } catch {
-    // ignore
   }
 }
 
@@ -159,6 +251,7 @@ export default function VideasyCustomPlayer({
 
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
+  const [useEmbedFallback, setUseEmbedFallback] = useState(false);
 
   const requestKey = useMemo(() => JSON.stringify(videasyRequest), [videasyRequest]);
 
@@ -194,12 +287,23 @@ export default function VideasyCustomPlayer({
     };
   }, [teardownHls]);
 
+  useEffect(() => {
+    if (!useEmbedFallback || !continueWatching) return;
+
+    const handler = (event: MessageEvent) => {
+      applyVideasyEmbedProgressMessage(event, continueWatching);
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, [useEmbedFallback, continueWatching]);
+
   // Resolve Videasy sources and master HLS playlist (client-side WASM + fetch).
   useEffect(() => {
     const gen = ++sourceResolveGen.current;
     setIsResolving(true);
     setPlaybackError(null);
     setMasterBundle(null);
+    setUseEmbedFallback(false);
     teardownHls();
 
     let cancelled = false;
@@ -222,9 +326,7 @@ export default function VideasyCustomPlayer({
           try {
             masterUrl = withResolutionCacheBuster(normalizeVideasyUrl(picked));
           } catch {
-            throw new Error(
-              "This source is not a direct HLS manifest. Use the site embed for this provider."
-            );
+            throw new Error(VIDEASY_EMBED_FALLBACK_MESSAGE);
           }
         }
 
@@ -248,8 +350,15 @@ export default function VideasyCustomPlayer({
         setMasterBundle({ url: masterUrl, playlist: playlistText });
       } catch (e: unknown) {
         if (cancelled || gen !== sourceResolveGen.current) return;
+        if (shouldFallbackToVideasyEmbed(e)) {
+          setUseEmbedFallback(true);
+          setPlaybackError(null);
+          setMasterBundle(null);
+          setResolvedLabel("Videasy embed");
+        } else {
+          setPlaybackError(e instanceof Error ? e.message : String(e));
+        }
         setIsResolving(false);
-        setPlaybackError(e instanceof Error ? e.message : String(e));
       }
     };
 
@@ -390,6 +499,7 @@ export default function VideasyCustomPlayer({
 
   const handleRetry = () => {
     setPlaybackError(null);
+    setUseEmbedFallback(false);
     setReloadToken((t) => t + 1);
   };
 
@@ -411,11 +521,26 @@ export default function VideasyCustomPlayer({
           >
             Options
           </button>
+          {useEmbedFallback ? (
+            <button type="button" className="videasy-custom-player__icon-btn" onClick={handleRetry}>
+              Retry HLS
+            </button>
+          ) : null}
         </div>
       </div>
 
       <div className="videasy-custom-player__stage">
-        <video ref={videoRef} className="videasy-custom-player__video" controls playsInline />
+        {useEmbedFallback ? (
+          <iframe
+            title={title}
+            src={streamUrl}
+            allowFullScreen
+            allow="autoplay; fullscreen; picture-in-picture"
+            className="videasy-custom-player__embed"
+          />
+        ) : (
+          <video ref={videoRef} className="videasy-custom-player__video" controls playsInline />
+        )}
 
         {isResolving ? (
           <div className="videasy-custom-player__overlay videasy-custom-player__overlay--loading">
@@ -436,7 +561,9 @@ export default function VideasyCustomPlayer({
       </div>
 
       {!playbackError && !isResolving ? (
-        <p className="videasy-custom-player__meta">{resolvedLabel}</p>
+        <p className="videasy-custom-player__meta">
+          {useEmbedFallback ? "Playing in Videasy embed (decoded URL was not direct HLS)." : resolvedLabel}
+        </p>
       ) : null}
 
       {optionsOpen ? (
@@ -456,7 +583,11 @@ export default function VideasyCustomPlayer({
 
             <label className="videasy-custom-player__field">
               <span>Source</span>
-              <select value={selectedSource} onChange={(e) => handleChangeSource(e.target.value)}>
+              <select
+                value={selectedSource}
+                onChange={(e) => handleChangeSource(e.target.value)}
+                disabled={useEmbedFallback}
+              >
                 {VIDEOASY_SOURCE_UI_LABELS.map((s) => (
                   <option key={s} value={s}>
                     {s}
@@ -476,7 +607,7 @@ export default function VideasyCustomPlayer({
               <select
                 value={qualityDropdownValue}
                 onChange={(e) => handleChangeQuality(e.target.value)}
-                disabled={!availableQualities.length}
+                disabled={!availableQualities.length || useEmbedFallback}
               >
                 {!availableQualities.length ? <option value="auto">Auto</option> : null}
                 {availableQualities.map((q) => (

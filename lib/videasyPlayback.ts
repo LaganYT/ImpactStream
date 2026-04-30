@@ -1,5 +1,17 @@
 /** Client-side Videasy URL and HLS helpers (aligned with authorized_playback_screen.dart). */
 
+/** Decoded URL is not direct HLS and not a normalizable Videasy player URL — use iframe fallback. */
+export const VIDEASY_EMBED_FALLBACK_MESSAGE =
+  "This source is not a direct HLS manifest. Use the site embed for this provider.";
+
+export function shouldFallbackToVideasyEmbed(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error);
+  if (msg === VIDEASY_EMBED_FALLBACK_MESSAGE) return true;
+  // Decoded URL opened in fetch but returned non-playlist (e.g. HTML shell).
+  if (msg.includes("Expected an HLS playlist")) return true;
+  return false;
+}
+
 export const VIDEOASY_SOURCE_UI_LABELS = [
   "Auto",
   "Neon",
