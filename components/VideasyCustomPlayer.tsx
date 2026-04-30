@@ -108,8 +108,8 @@ function saveContinueProgress(
       return;
     }
 
-    const seasonNumber = cfg.seasonNumber ?? Number(parsed.seasonNumber) || 1;
-    const episodeNumber = cfg.episodeNumber ?? Number(parsed.episodeNumber) || 1;
+    const seasonNumber = cfg.seasonNumber ?? (Number(parsed.seasonNumber) || 1);
+    const episodeNumber = cfg.episodeNumber ?? (Number(parsed.episodeNumber) || 1);
 
     window.localStorage.setItem(
       cfg.storageKey,
