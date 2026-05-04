@@ -5,7 +5,7 @@ export default function Footer() {
     <footer className="footer">
       <div>
         <span>
-          &copy; {new Date().getFullYear()} ImpactStream &mdash; Powered by TMDB and VIDEASY.
+          &copy;{new Date().getFullYear()}  ImpactStream.
         </span>
       </div>
       <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', opacity: 0.7 }}>
