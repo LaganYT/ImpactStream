@@ -19,7 +19,9 @@ export default function App({ Component, pageProps }: AppProps) {
   return (
     <>
       <Navbar query={query} setQuery={setQuery} onSearch={onSearch} />
-      <Component {...pageProps} />
+      <div className="app-content">
+        <Component {...pageProps} />
+      </div>
       <Footer />
     </>
   );

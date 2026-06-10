@@ -1,7 +1,9 @@
 import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
+import { FaInfoCircle, FaPlay, FaStar } from "react-icons/fa";
 import ContinueWatchingRow from "../components/ContinueWatchingRow";
+import MediaRow, { MediaRowItem } from "../components/MediaRow";
 
 type MediaType = "movie" | "tv";
 
@@ -23,6 +25,17 @@ type MediaItem = {
 
 type FilterType = "all" | MediaType | "anime";
 
+const ROW_TITLES: Record<string, string> = {
+  trending: "Trending Now",
+  anime: "Popular Anime",
+  nowPlaying: "Now Playing in Theaters",
+  popularMovies: "Popular Movies",
+  topRatedMovies: "Top Rated Movies",
+  upcomingMovies: "Coming Soon",
+  airingToday: "Airing Today",
+  onTheAir: "New Episodes This Week",
+};
+
 export default function Home() {
   const [trending, setTrending] = useState<MediaItem[]>([]);
   const [categories, setCategories] = useState<Record<string, MediaItem[]>>({});
@@ -32,6 +45,7 @@ export default function Home() {
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [featuredIndex, setFeaturedIndex] = useState(0);
   const router = useRouter();
 
   const normalizeMediaType = (item: MediaItem): MediaType =>
@@ -152,6 +166,25 @@ export default function Home() {
     return searchResults.filter((item) => normalizeMediaType(item) === activeFilter);
   }, [activeFilter, searchResults]);
 
+  const featured = useMemo(
+    () =>
+      [...trending]
+        .filter((item) => item.backdrop_path && item.overview)
+        .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
+        .slice(0, 6),
+    [trending]
+  );
+
+  useEffect(() => {
+    setFeaturedIndex(0);
+    if (featured.length < 2) return;
+    const timer = setInterval(
+      () => setFeaturedIndex((current) => (current + 1) % featured.length),
+      8000
+    );
+    return () => clearInterval(timer);
+  }, [featured.length]);
+
   const handleCardClick = (item: MediaItem) => {
     if (isAnime(item)) {
       const type = normalizeMediaType(item);
@@ -175,12 +208,27 @@ export default function Home() {
     item.poster_path
       ? `https://image.tmdb.org/t/p/w500${item.poster_path}`
       : "/no-image.svg";
-  const heroSpotlight = trending[0];
+
+  const toRowItems = (items: MediaItem[]): MediaRowItem[] =>
+    items.slice(0, 18).map((item) => ({
+      id: `${normalizeMediaType(item)}-${item.id}`,
+      title: getTitle(item),
+      posterUrl: getPoster(item),
+      year: getYear(item) === "N/A" ? undefined : getYear(item),
+      rating: item.vote_average,
+    }));
+
+  const handleRowClick = (items: MediaItem[]) => (row: MediaRowItem) => {
+    const match = items.find((item) => `${normalizeMediaType(item)}-${item.id}` === row.id);
+    if (match) handleCardClick(match);
+  };
+
+  const spotlight = featured.length ? featured[featuredIndex % featured.length] : null;
 
   return (
     <div className="home discover-home">
-      <main className="container discover-shell">
-        {query ? (
+      {query ? (
+        <main className="container discover-shell">
           <section className="discover-search-panel">
             <div className="discover-search-header">
               <h1>Search Results</h1>
@@ -256,66 +304,85 @@ export default function Home() {
               ))}
             </div>
           </section>
-        ) : (
-          <>
-            <section className="discover-hero">
-              <div className="discover-hero-copy">
-                <p className="discover-kicker">Stream Smarter</p>
-                <h1>Find movies and shows worth your time.</h1>
-                <p>
-                  Browse trending picks, jump into Live TV, and open details pages with
-                  cleaner controls and faster discovery.
-                </p>
-                <a href="/live-tv" className="discover-live-link">
-                  Explore Live TV
-                </a>
+        </main>
+      ) : (
+        <>
+          {spotlight ? (
+            <section className="billboard">
+              <div className="billboard-backdrop">
+                <img
+                  key={`${normalizeMediaType(spotlight)}-${spotlight.id}`}
+                  src={`https://image.tmdb.org/t/p/original${spotlight.backdrop_path}`}
+                  alt={getTitle(spotlight)}
+                />
               </div>
-              {heroSpotlight ? (
-                <div className="discover-spotlight" onClick={() => handleCardClick(heroSpotlight)}>
-                  <img
-                    src={
-                      heroSpotlight.backdrop_path
-                        ? `https://image.tmdb.org/t/p/original${heroSpotlight.backdrop_path}`
-                        : getPoster(heroSpotlight)
-                    }
-                    alt={getTitle(heroSpotlight)}
-                  />
-                  <div className="discover-spotlight-overlay">
-                    <span>Spotlight</span>
-                    <h3>{getTitle(heroSpotlight)}</h3>
-                  </div>
+              <div className="billboard-vignette-bottom" />
+              <div className="billboard-vignette-left" />
+              <div className="billboard-content">
+                <p className="billboard-kicker">
+                  #{(featuredIndex % featured.length) + 1} Trending Today
+                </p>
+                <h1 className="billboard-title">{getTitle(spotlight)}</h1>
+                <div className="billboard-meta">
+                  <span className="meta-rating">
+                    <FaStar size={12} /> {(spotlight.vote_average || 0).toFixed(1)}
+                  </span>
+                  <span>{getYear(spotlight)}</span>
+                  <span className="meta-pill">
+                    {normalizeMediaType(spotlight) === "tv" ? "SERIES" : "MOVIE"}
+                  </span>
+                  <span className="meta-pill">HD</span>
                 </div>
-              ) : null}
+                <p className="billboard-overview">{spotlight.overview}</p>
+                <div className="billboard-actions">
+                  <button className="btn-play" onClick={() => handleCardClick(spotlight)}>
+                    <FaPlay /> Play
+                  </button>
+                  <button className="btn-more-info" onClick={() => handleCardClick(spotlight)}>
+                    <FaInfoCircle /> More Info
+                  </button>
+                </div>
+              </div>
+              <div className="billboard-dots">
+                {featured.map((item, index) => (
+                  <button
+                    key={`${normalizeMediaType(item)}-${item.id}`}
+                    className={
+                      index === featuredIndex % featured.length
+                        ? "billboard-dot active"
+                        : "billboard-dot"
+                    }
+                    onClick={() => setFeaturedIndex(index)}
+                    aria-label={`Show ${getTitle(item)}`}
+                  />
+                ))}
+              </div>
             </section>
+          ) : (
+            <div className="billboard-loading">
+              <div className="loading">Loading</div>
+            </div>
+          )}
+
+          <main className="home-rows">
+            {error ? <p className="discover-error">{error}</p> : null}
 
             <ContinueWatchingRow maxItems={12} showViewAll={true} />
 
-            <section className="categories">
-              {Object.entries(categories).map(([key, items]) => (
-                <div key={key} className="category discover-category">
-                  <h3>
-                    {key === "trending"
-                      ? "Trending Now"
-                      : key.replace(/([A-Z])/g, " $1").replace(/^./, (str) => str.toUpperCase())}
-                  </h3>
-                  <div className="category-scroll">
-                    {items.slice(0, 18).map((item) => (
-                      <div
-                        key={`${normalizeMediaType(item)}-${item.id}`}
-                        className="category-item"
-                        onClick={() => handleCardClick(item)}
-                      >
-                        <img src={getPoster(item)} alt={getTitle(item)} />
-                        <h4>{getTitle(item)}</h4>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </section>
-          </>
-        )}
-      </main>
+            {Object.entries(categories).map(([key, items]) => (
+              <MediaRow
+                key={key}
+                title={
+                  ROW_TITLES[key] ||
+                  key.replace(/([A-Z])/g, " $1").replace(/^./, (str) => str.toUpperCase())
+                }
+                items={toRowItems(items)}
+                onItemClick={handleRowClick(items)}
+              />
+            ))}
+          </main>
+        </>
+      )}
     </div>
   );
 }
