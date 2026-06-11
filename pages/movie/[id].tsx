@@ -1,24 +1,7 @@
 import { useRouter } from "next/router";
 import axios from "axios";
-import { useEffect, useMemo, useState } from "react";
-import {
-  fetchVideasyDownloadData,
-  SourceItem,
-  SubtitleItem,
-} from "../../utils/videasyDownloader";
-import { getMediaType, isAnimeItem, RoutableMediaItem } from "../../utils/mediaRouting";
-import { useTitleModal } from "../../components/TitleModal";
+import { useEffect, useState } from "react";
 import MediaDetailShell from "../../components/MediaDetailShell";
-import DownloadModal from "../../components/DownloadModal";
-import MediaRow, { MediaRowItem } from "../../components/MediaRow";
-
-type RecommendationItem = RoutableMediaItem & {
-  title?: string;
-  name?: string;
-  poster_path?: string;
-  release_date?: string;
-  vote_average?: number;
-};
 
 type MovieDetails = {
   title?: string;
@@ -30,29 +13,13 @@ type MovieDetails = {
   runtime?: number;
   genres?: { id: number; name: string }[];
   imdb_id?: string;
-  recommendations?: { results?: RecommendationItem[] };
 };
-
-function formatRuntime(minutes?: number): string | null {
-  if (!minutes || minutes <= 0) return null;
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  if (hours === 0) return `${mins}m`;
-  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
-}
 
 export default function MovieDetailsPage() {
   const router = useRouter();
-  const { openTitle } = useTitleModal();
   const { id } = router.query;
   const [movie, setMovie] = useState<MovieDetails | null>(null);
   const [resumeSeconds, setResumeSeconds] = useState(0);
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
-  const [downloadSources, setDownloadSources] = useState<SourceItem[]>([]);
-  const [downloadSubtitles, setDownloadSubtitles] = useState<SubtitleItem[]>([]);
-  const [downloadError, setDownloadError] = useState("");
-  const [downloadTitle, setDownloadTitle] = useState("");
 
   useEffect(() => {
     if (!id) return;
@@ -125,7 +92,6 @@ export default function MovieDetailsPage() {
       const { data } = await axios.get(`https://api.themoviedb.org/3/movie/${id}`, {
         params: {
           api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY,
-          append_to_response: "recommendations",
         },
       });
       setMovie(data);
@@ -167,35 +133,6 @@ export default function MovieDetailsPage() {
     }
   }, [id, movie]);
 
-  const title = movie?.title || "Untitled";
-  const year = movie?.release_date?.slice(0, 4);
-  const runtimeLabel = formatRuntime(movie?.runtime);
-
-  const tags = useMemo(
-    () => (movie?.genres || []).slice(0, 6).map((genre) => genre.name),
-    [movie?.genres]
-  );
-
-  const recommendations = useMemo(
-    () => (movie?.recommendations?.results || []).filter((item) => item.poster_path),
-    [movie?.recommendations]
-  );
-
-  const recommendationRowItems: MediaRowItem[] = recommendations.slice(0, 18).map((item) => ({
-    id: item.id,
-    title: item.title || item.name || "Untitled",
-    posterUrl: `https://image.tmdb.org/t/p/w500${item.poster_path}`,
-    year: (item.release_date || "").slice(0, 4) || undefined,
-    rating: item.vote_average,
-  }));
-
-  const handleRecommendationClick = (row: MediaRowItem) => {
-    const match = recommendations.find((item) => item.id === row.id);
-    if (match) {
-      openTitle({ id: match.id, mediaType: getMediaType(match), isAnime: isAnimeItem(match) });
-    }
-  };
-
   if (!movie) return <div className="loading">Loading...</div>;
 
   const movieId = Array.isArray(id) ? id[0] : id;
@@ -210,70 +147,10 @@ export default function MovieDetailsPage() {
     movieQuery.set("progress", String(resumeSeconds));
   }
 
-  const handleDownload = async () => {
-    const tmdbId = Number(Array.isArray(id) ? id[0] : id);
-    if (!tmdbId) return;
-
-    try {
-      setIsDownloading(true);
-      setDownloadError("");
-
-      const releaseYear = (movie.release_date || "").slice(0, 4);
-      const decoded = await fetchVideasyDownloadData({
-        tmdbId,
-        mediaType: "movie",
-        title,
-        year: releaseYear,
-        imdbId: movie.imdb_id || "",
-      });
-
-      setDownloadSources(decoded.sources || []);
-      setDownloadSubtitles(decoded.subtitles || []);
-      setDownloadTitle(`${title}${releaseYear ? ` - [${releaseYear}]` : ""}`);
-      setIsDownloadModalOpen(true);
-    } catch (error: any) {
-      setDownloadError(error?.message || "Unable to load download sources.");
-      setIsDownloadModalOpen(true);
-    } finally {
-      setIsDownloading(false);
-    }
-  };
-
   return (
-    <>
-      <MediaDetailShell
-        mediaLabel="Movie"
-        title={title}
-        summary={movie.overview || "No overview is available for this title yet."}
-        embedUrl={`https://player.videasy.net/movie/${movieId}?${movieQuery.toString()}`}
-        rating={movie.vote_average}
-        metaItems={[year, runtimeLabel].filter(Boolean) as string[]}
-        tags={tags}
-        actions={
-          <button className="btn-more-info" onClick={handleDownload} disabled={isDownloading}>
-            {isDownloading ? "Decoding..." : "Download"}
-          </button>
-        }
-        recommendations={
-          recommendationRowItems.length ? (
-            <MediaRow
-              title="More Like This"
-              items={recommendationRowItems}
-              onItemClick={handleRecommendationClick}
-            />
-          ) : null
-        }
-      />
-
-      <DownloadModal
-        isOpen={isDownloadModalOpen}
-        title={downloadTitle}
-        error={downloadError}
-        sources={downloadSources}
-        subtitles={downloadSubtitles}
-        fallbackName={title}
-        onClose={() => setIsDownloadModalOpen(false)}
-      />
-    </>
+    <MediaDetailShell
+      title={movie.title || "Untitled"}
+      embedUrl={`https://player.videasy.net/movie/${movieId}?${movieQuery.toString()}`}
+    />
   );
 }

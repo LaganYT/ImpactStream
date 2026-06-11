@@ -2451,64 +2451,20 @@ button:active {
 }
 
 
-/* ── Watch page (cineby-style player-first) ────────────────────── */
+/* ── Watch page (fullscreen player) ────────────────────────────── */
 
-.watch-page {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 1.25rem var(--side-gutter) 1rem;
-}
-
-.watch-player {
-  aspect-ratio: 16 / 9;
-  max-height: calc(100vh - var(--nav-height) - 4rem);
+.watch-screen {
+  height: calc(100vh - var(--nav-height));
   width: 100%;
-  border-radius: 10px;
-  overflow: hidden;
   background: #000;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
 }
 
-.watch-info {
-  padding: 1.5rem 0 0.5rem;
-  max-width: 920px;
-}
-
-.watch-headline {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1.5rem;
-  flex-wrap: wrap;
-  margin-bottom: 0.6rem;
-}
-
-.watch-headline-text {
-  min-width: 0;
-}
-
-.watch-kicker {
-  font-size: 0.74rem;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--accent-soft);
-  margin-bottom: 0.35rem;
-}
-
-.watch-title {
-  font-size: clamp(1.5rem, 2.6vw, 2.2rem);
-  font-weight: 800;
-  letter-spacing: -0.5px;
-  color: #fff;
-  margin-bottom: 0.6rem;
-}
-
-.watch-actions {
-  display: flex;
-  gap: 0.6rem;
-  flex-wrap: wrap;
+.watch-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  background: #000;
 }
 
 .detail-meta-row {
@@ -2519,42 +2475,6 @@ button:active {
   font-size: 0.92rem;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.85);
-}
-
-.detail-now-playing {
-  margin: 0.75rem 0;
-  padding: 0.8rem 1rem;
-  border-radius: 8px;
-  background: var(--surface);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: var(--text-muted);
-  font-size: 0.9rem;
-}
-
-.watch-overview {
-  margin-top: 0.75rem;
-  font-size: 0.95rem;
-  line-height: 1.6;
-  color: rgba(255, 255, 255, 0.82);
-}
-
-.watch-genres {
-  margin-top: 0.7rem;
-  font-size: 0.88rem;
-  color: rgba(255, 255, 255, 0.78);
-}
-
-.watch-genres span {
-  color: rgba(255, 255, 255, 0.45);
-}
-
-.watch-episodes {
-  max-width: 920px;
-  padding: 1.25rem 0 0;
-}
-
-.watch-recs {
-  padding: 1.5rem 0 0;
 }
 
 /* ── Title info modal (Netflix-style popup) ────────────────────── */
@@ -2626,6 +2546,48 @@ button:active {
   position: absolute;
   inset: 0;
   background: linear-gradient(180deg, transparent 30%, rgba(22, 22, 31, 0.55) 75%, var(--surface) 100%);
+}
+
+.tm-trailer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: #000;
+}
+
+.tm-trailer iframe {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 100%;
+  transform: translate(-50%, -50%) scale(1.25);
+  border: 0;
+}
+
+.tm-mute {
+  position: absolute;
+  top: 0.9rem;
+  right: 3.6rem;
+  z-index: 5;
+  width: 36px;
+  height: 36px;
+  min-width: 0;
+  padding: 0;
+  border-radius: 50%;
+  background: rgba(11, 11, 16, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #fff;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tm-mute:hover {
+  background: rgba(11, 11, 16, 0.95);
+  border-color: rgba(255, 255, 255, 0.7);
 }
 
 .tm-hero {
@@ -2842,7 +2804,7 @@ button:active {
 
 .episode-row {
   display: grid;
-  grid-template-columns: 2rem 150px minmax(0, 1fr);
+  grid-template-columns: 2rem 150px minmax(0, 1fr) auto;
   gap: 1rem;
   align-items: center;
   padding: 0.9rem 0.75rem;
@@ -2952,6 +2914,41 @@ button:active {
 .episodes-empty {
   color: var(--text-muted);
   padding: 1rem 0;
+}
+
+.episode-download {
+  width: 34px;
+  height: 34px;
+  min-width: 0;
+  padding: 0;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 0.78rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s ease, color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.episode-row:hover .episode-download {
+  opacity: 1;
+}
+
+.episode-download:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: #fff;
+  color: #fff;
+}
+
+.episode-download:disabled,
+.episode-download.downloading {
+  opacity: 1;
+  cursor: progress;
+  color: var(--accent-soft);
+  border-color: var(--accent-soft);
 }
 
 /* ── Continue Watching ─────────────────────────────────────────── */
@@ -3439,10 +3436,6 @@ button:active {
     height: 220px;
   }
 
-  .watch-player {
-    border-radius: 8px;
-  }
-
   .tm-hero {
     left: 1.25rem;
     right: 1.25rem;
@@ -3467,9 +3460,13 @@ button:active {
   }
 
   .episode-row {
-    grid-template-columns: 1.4rem 110px minmax(0, 1fr);
+    grid-template-columns: 1.4rem 110px minmax(0, 1fr) auto;
     gap: 0.7rem;
     padding: 0.75rem 0.4rem;
+  }
+
+  .episode-download {
+    opacity: 1;
   }
 
   .episode-thumb {

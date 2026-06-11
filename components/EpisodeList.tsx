@@ -1,4 +1,4 @@
-import { FaPlay } from "react-icons/fa";
+import { FaDownload, FaPlay } from "react-icons/fa";
 
 export type EpisodeInfo = {
   episode_number: number;
@@ -16,6 +16,8 @@ type Props = {
   activeEpisode?: number;
   onSeasonChange: (season: number) => void;
   onEpisodeSelect: (episode: number) => void;
+  onEpisodeDownload?: (episode: number) => void;
+  downloadingEpisode?: number;
 };
 
 export default function EpisodeList({
@@ -25,6 +27,8 @@ export default function EpisodeList({
   activeEpisode,
   onSeasonChange,
   onEpisodeSelect,
+  onEpisodeDownload,
+  downloadingEpisode,
 }: Props) {
   return (
     <section className="episodes-section">
@@ -51,6 +55,7 @@ export default function EpisodeList({
       <div className="episode-list">
         {episodes.map((episode) => {
           const isActive = episode.episode_number === activeEpisode;
+          const isDownloading = downloadingEpisode === episode.episode_number;
           return (
             <div
               key={episode.episode_number}
@@ -79,6 +84,20 @@ export default function EpisodeList({
                 </div>
                 {episode.overview ? <p>{episode.overview}</p> : null}
               </div>
+              {onEpisodeDownload ? (
+                <button
+                  className={isDownloading ? "episode-download downloading" : "episode-download"}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onEpisodeDownload(episode.episode_number);
+                  }}
+                  disabled={isDownloading}
+                  aria-label={`Download episode ${episode.episode_number}`}
+                  title={isDownloading ? "Decoding..." : "Download episode"}
+                >
+                  <FaDownload />
+                </button>
+              ) : null}
             </div>
           );
         })}
