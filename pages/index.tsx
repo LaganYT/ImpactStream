@@ -2,6 +2,10 @@ import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
 import ContinueWatchingRow from "../components/ContinueWatchingRow";
+import MediaRow, { MediaRowItem } from "../components/MediaRow";
+import Billboard, { BillboardItem } from "../components/Billboard";
+import { getDetailRoute, getMediaType, isAnimeItem } from "../utils/mediaRouting";
+import { useTitleModal } from "../components/TitleModal";
 
 type MediaType = "movie" | "tv";
 
@@ -23,6 +27,17 @@ type MediaItem = {
 
 type FilterType = "all" | MediaType | "anime";
 
+const ROW_TITLES: Record<string, string> = {
+  trending: "Trending Now",
+  anime: "Popular Anime",
+  nowPlaying: "Now Playing in Theaters",
+  popularMovies: "Popular Movies",
+  topRatedMovies: "Top Rated Movies",
+  upcomingMovies: "Coming Soon",
+  airingToday: "Airing Today",
+  onTheAir: "New Episodes This Week",
+};
+
 export default function Home() {
   const [trending, setTrending] = useState<MediaItem[]>([]);
   const [categories, setCategories] = useState<Record<string, MediaItem[]>>({});
@@ -33,19 +48,14 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
-
-  const normalizeMediaType = (item: MediaItem): MediaType =>
-    item.media_type === "tv" || Boolean(item.first_air_date) ? "tv" : "movie";
-
-  const isAnime = (item: MediaItem) =>
-    Boolean(item.genre_ids?.includes(16) && (item.original_language === "ja" || normalizeMediaType(item) === "tv"));
+  const { openTitle } = useTitleModal();
 
   const decorateResults = (items: MediaItem[], forcedType?: MediaType) =>
     items
       .filter((item) => item?.id)
       .map((item) => ({
         ...item,
-        media_type: forcedType || normalizeMediaType(item),
+        media_type: forcedType || getMediaType(item),
       }))
       .sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
 
@@ -148,19 +158,25 @@ export default function Home() {
 
   const filteredResults = useMemo(() => {
     if (activeFilter === "all") return searchResults;
-    if (activeFilter === "anime") return searchResults.filter((item) => isAnime(item));
-    return searchResults.filter((item) => normalizeMediaType(item) === activeFilter);
+    if (activeFilter === "anime") return searchResults.filter((item) => isAnimeItem(item));
+    return searchResults.filter((item) => getMediaType(item) === activeFilter);
   }, [activeFilter, searchResults]);
 
-  const handleCardClick = (item: MediaItem) => {
-    if (isAnime(item)) {
-      const type = normalizeMediaType(item);
-      router.push({ pathname: `/anime/${item.id}`, query: { type } });
-      return;
-    }
+  const featured = useMemo(
+    () =>
+      [...trending]
+        .filter((item) => item.backdrop_path && item.overview)
+        .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
+        .slice(0, 6),
+    [trending]
+  );
 
-    const type = normalizeMediaType(item);
-    router.push({ pathname: `/${type}/${item.id}` });
+  const openInfo = (item: MediaItem) => {
+    openTitle({ id: item.id, mediaType: getMediaType(item), isAnime: isAnimeItem(item) });
+  };
+
+  const playNow = (item: MediaItem) => {
+    router.push(getDetailRoute(item));
   };
 
   const handleRefinedSearch = () => {
@@ -175,12 +191,44 @@ export default function Home() {
     item.poster_path
       ? `https://image.tmdb.org/t/p/w500${item.poster_path}`
       : "/no-image.svg";
-  const heroSpotlight = trending[0];
+
+  const itemKey = (item: MediaItem) => `${getMediaType(item)}-${item.id}`;
+
+  const billboardItems: BillboardItem[] = featured.map((item) => ({
+    id: itemKey(item),
+    title: getTitle(item),
+    backdropUrl: `https://image.tmdb.org/t/p/original${item.backdrop_path}`,
+    overview: item.overview,
+    rating: item.vote_average,
+    year: getYear(item) === "N/A" ? undefined : getYear(item),
+    typeLabel: getMediaType(item) === "tv" ? "SERIES" : "MOVIE",
+  }));
+
+  const handleBillboardAction = (play: boolean) => (billboardItem: BillboardItem) => {
+    const match = featured.find((item) => itemKey(item) === billboardItem.id);
+    if (!match) return;
+    if (play) playNow(match);
+    else openInfo(match);
+  };
+
+  const toRowItems = (items: MediaItem[]): MediaRowItem[] =>
+    items.slice(0, 18).map((item) => ({
+      id: itemKey(item),
+      title: getTitle(item),
+      posterUrl: getPoster(item),
+      year: getYear(item) === "N/A" ? undefined : getYear(item),
+      rating: item.vote_average,
+    }));
+
+  const handleRowClick = (items: MediaItem[]) => (row: MediaRowItem) => {
+    const match = items.find((item) => itemKey(item) === row.id);
+    if (match) openInfo(match);
+  };
 
   return (
     <div className="home discover-home">
-      <main className="container discover-shell">
-        {query ? (
+      {query ? (
+        <main className="container discover-shell">
           <section className="discover-search-panel">
             <div className="discover-search-header">
               <h1>Search Results</h1>
@@ -213,19 +261,19 @@ export default function Home() {
                 className={activeFilter === "movie" ? "discover-chip active" : "discover-chip"}
                 onClick={() => setActiveFilter("movie")}
               >
-                Movies ({searchResults.filter((item) => normalizeMediaType(item) === "movie").length})
+                Movies ({searchResults.filter((item) => getMediaType(item) === "movie").length})
               </button>
               <button
                 className={activeFilter === "tv" ? "discover-chip active" : "discover-chip"}
                 onClick={() => setActiveFilter("tv")}
               >
-                TV Shows ({searchResults.filter((item) => normalizeMediaType(item) === "tv").length})
+                TV Shows ({searchResults.filter((item) => getMediaType(item) === "tv").length})
               </button>
               <button
                 className={activeFilter === "anime" ? "discover-chip active" : "discover-chip"}
                 onClick={() => setActiveFilter("anime")}
               >
-                Anime ({searchResults.filter((item) => isAnime(item)).length})
+                Anime ({searchResults.filter((item) => isAnimeItem(item)).length})
               </button>
             </div>
 
@@ -242,13 +290,13 @@ export default function Home() {
             <div className="discover-grid">
               {filteredResults.map((item) => (
                 <article
-                  key={`${normalizeMediaType(item)}-${item.id}`}
+                  key={itemKey(item)}
                   className="discover-card"
-                  onClick={() => handleCardClick(item)}
+                  onClick={() => openInfo(item)}
                 >
                   <img src={getPoster(item)} alt={getTitle(item)} />
                   <div className="discover-card-content">
-                    <span className="discover-pill">{isAnime(item) ? "ANIME" : normalizeMediaType(item).toUpperCase()}</span>
+                    <span className="discover-pill">{isAnimeItem(item) ? "ANIME" : getMediaType(item).toUpperCase()}</span>
                     <h3>{getTitle(item)}</h3>
                     <p>{getYear(item)} • ⭐ {(item.vote_average || 0).toFixed(1)}</p>
                   </div>
@@ -256,66 +304,41 @@ export default function Home() {
               ))}
             </div>
           </section>
-        ) : (
-          <>
-            <section className="discover-hero">
-              <div className="discover-hero-copy">
-                <p className="discover-kicker">Stream Smarter</p>
-                <h1>Find movies and shows worth your time.</h1>
-                <p>
-                  Browse trending picks, jump into Live TV, and open details pages with
-                  cleaner controls and faster discovery.
-                </p>
-                <a href="/live-tv" className="discover-live-link">
-                  Explore Live TV
-                </a>
-              </div>
-              {heroSpotlight ? (
-                <div className="discover-spotlight" onClick={() => handleCardClick(heroSpotlight)}>
-                  <img
-                    src={
-                      heroSpotlight.backdrop_path
-                        ? `https://image.tmdb.org/t/p/original${heroSpotlight.backdrop_path}`
-                        : getPoster(heroSpotlight)
-                    }
-                    alt={getTitle(heroSpotlight)}
-                  />
-                  <div className="discover-spotlight-overlay">
-                    <span>Spotlight</span>
-                    <h3>{getTitle(heroSpotlight)}</h3>
-                  </div>
-                </div>
-              ) : null}
-            </section>
+        </main>
+      ) : (
+        <>
+          {billboardItems.length ? (
+            <Billboard
+              items={billboardItems}
+              getKicker={(_, index) => `#${index + 1} Trending Today`}
+              onPlay={handleBillboardAction(true)}
+              onInfo={handleBillboardAction(false)}
+            />
+          ) : (
+            <div className="billboard-loading">
+              <div className="loading">Loading</div>
+            </div>
+          )}
 
-            <ContinueWatchingRow maxItems={12} showViewAll={true} />
+          <main className="home-rows">
+            {error ? <p className="discover-error">{error}</p> : null}
 
-            <section className="categories">
-              {Object.entries(categories).map(([key, items]) => (
-                <div key={key} className="category discover-category">
-                  <h3>
-                    {key === "trending"
-                      ? "Trending Now"
-                      : key.replace(/([A-Z])/g, " $1").replace(/^./, (str) => str.toUpperCase())}
-                  </h3>
-                  <div className="category-scroll">
-                    {items.slice(0, 18).map((item) => (
-                      <div
-                        key={`${normalizeMediaType(item)}-${item.id}`}
-                        className="category-item"
-                        onClick={() => handleCardClick(item)}
-                      >
-                        <img src={getPoster(item)} alt={getTitle(item)} />
-                        <h4>{getTitle(item)}</h4>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </section>
-          </>
-        )}
-      </main>
+            <ContinueWatchingRow maxItems={12} />
+
+            {Object.entries(categories).map(([key, items]) => (
+              <MediaRow
+                key={key}
+                title={
+                  ROW_TITLES[key] ||
+                  key.replace(/([A-Z])/g, " $1").replace(/^./, (str) => str.toUpperCase())
+                }
+                items={toRowItems(items)}
+                onItemClick={handleRowClick(items)}
+              />
+            ))}
+          </main>
+        </>
+      )}
     </div>
   );
 }

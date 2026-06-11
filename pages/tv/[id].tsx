@@ -1,13 +1,7 @@
 import { useRouter } from "next/router";
 import axios from "axios";
-import { useEffect, useMemo, useState } from "react";
-import {
-  fetchVideasyDownloadData,
-  SourceItem,
-  SubtitleItem,
-} from "../../utils/videasyDownloader";
+import { useEffect, useState } from "react";
 import MediaDetailShell from "../../components/MediaDetailShell";
-import DownloadModal from "../../components/DownloadModal";
 
 type TVDetails = {
   name?: string;
@@ -44,12 +38,6 @@ export default function TVDetailsPage() {
   const [episodesCount, setEpisodesCount] = useState(0);
   const [resumeSeconds, setResumeSeconds] = useState(0);
   const [isProgressLoaded, setIsProgressLoaded] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
-  const [downloadSources, setDownloadSources] = useState<SourceItem[]>([]);
-  const [downloadSubtitles, setDownloadSubtitles] = useState<SubtitleItem[]>([]);
-  const [downloadError, setDownloadError] = useState("");
-  const [downloadTitle, setDownloadTitle] = useState("");
 
   useEffect(() => {
     if (!id) return;
@@ -106,16 +94,13 @@ export default function TVDetailsPage() {
 
     try {
       const stored = window.localStorage.getItem(storageKey);
-      if (!stored) {
-        setIsProgressLoaded(true);
-        return;
-      }
-
-      const parsed = JSON.parse(stored) as {
-        seasonNumber?: number;
-        episodeNumber?: number;
-        timestamp?: number;
-      };
+      const parsed = stored
+        ? (JSON.parse(stored) as {
+            seasonNumber?: number;
+            episodeNumber?: number;
+            timestamp?: number;
+          })
+        : {};
       const savedSeason = Number(parsed?.seasonNumber);
       const savedEpisode = Number(parsed?.episodeNumber);
       const savedTimestamp = Math.floor(Number(parsed?.timestamp || 0));
@@ -132,6 +117,14 @@ export default function TVDetailsPage() {
     } catch {
       // Ignore invalid localStorage data.
     } finally {
+      const querySeason = Number(
+        Array.isArray(router.query.season) ? router.query.season[0] : router.query.season
+      );
+      const queryEpisode = Number(
+        Array.isArray(router.query.episode) ? router.query.episode[0] : router.query.episode
+      );
+      if (Number.isFinite(querySeason) && querySeason > 0) setSeasonNumber(querySeason);
+      if (Number.isFinite(queryEpisode) && queryEpisode > 0) setEpisodeNumber(queryEpisode);
       setIsProgressLoaded(true);
     }
   }, [id]);
@@ -302,35 +295,10 @@ export default function TVDetailsPage() {
     }
   }, [id, isProgressLoaded, seasonNumber, episodeNumber]);
 
-  const handleSeasonChange = (value: number) => {
-    setSeasonNumber(value);
-  };
+  if (!tvShow || episodesCount === 0 || seasonNumber <= 0 || episodeNumber <= 0) {
+    return <div className="loading">Loading...</div>;
+  }
 
-  const title = tvShow?.name || "Untitled";
-  const releaseDate = tvShow?.first_air_date || "Unknown";
-  const posterUrl = tvShow?.poster_path
-    ? `https://image.tmdb.org/t/p/w500${tvShow.poster_path}`
-    : "/no-image.svg";
-  const backdropUrl = tvShow?.backdrop_path
-    ? `https://image.tmdb.org/t/p/original${tvShow.backdrop_path}`
-    : undefined;
-
-  const metadata = useMemo(
-    () => [
-      { label: "First Air", value: releaseDate },
-      { label: "Rating", value: tvShow?.vote_average ? tvShow.vote_average.toFixed(1) : "N/A" },
-      { label: "Episodes", value: tvShow?.number_of_episodes ? String(tvShow.number_of_episodes) : "N/A" },
-      { label: "Seasons", value: tvShow?.number_of_seasons ? String(tvShow.number_of_seasons) : "N/A" },
-    ],
-    [releaseDate, tvShow?.number_of_episodes, tvShow?.number_of_seasons, tvShow?.vote_average]
-  );
-
-  const tags = useMemo(
-    () => (tvShow?.genres || []).slice(0, 6).map((genre) => genre.name),
-    [tvShow?.genres]
-  );
-
-  if (!tvShow) return <div className="loading">Loading...</div>;
   const tvId = Array.isArray(id) ? id[0] : id;
   const tvQuery = new URLSearchParams({
     color: "e50914",
@@ -343,95 +311,10 @@ export default function TVDetailsPage() {
     tvQuery.set("progress", String(resumeSeconds));
   }
 
-  const handleDownload = async () => {
-    const tmdbId = Number(Array.isArray(id) ? id[0] : id);
-    if (!tmdbId) return;
-
-    try {
-      setIsDownloading(true);
-      setDownloadError("");
-
-      const decoded = await fetchVideasyDownloadData({
-        tmdbId,
-        mediaType: "tv",
-        title,
-        year: (tvShow.first_air_date || "").slice(0, 4),
-        seasonId: seasonNumber,
-        episodeId: episodeNumber,
-        totalSeasons: Number(tvShow.number_of_seasons || 0),
-      });
-
-      setDownloadSources(decoded.sources || []);
-      setDownloadSubtitles(decoded.subtitles || []);
-      setDownloadTitle(
-        `${title} | S${seasonNumber}E${episodeNumber}${
-          tvShow.first_air_date ? ` - [${String(tvShow.first_air_date).slice(0, 4)}]` : ""
-        }`
-      );
-      setIsDownloadModalOpen(true);
-    } catch (error: any) {
-      setDownloadError(error?.message || "Unable to load download sources.");
-      setIsDownloadModalOpen(true);
-    } finally {
-      setIsDownloading(false);
-    }
-  };
-
   return (
-    <>
-      <MediaDetailShell
-        mediaLabel="Series"
-        title={title}
-        summary={tvShow.overview || "No overview is available for this series yet."}
-        embedUrl={`https://player.videasy.net/tv/${tvId}/${seasonNumber}/${episodeNumber}?${tvQuery.toString()}`}
-        posterUrl={posterUrl}
-        backdropUrl={backdropUrl}
-        metadata={metadata}
-        tags={tags}
-        controls={
-          <>
-            <label className="detail-select-field">
-              <span>Season</span>
-              <select value={seasonNumber} onChange={(e) => handleSeasonChange(Number(e.target.value))}>
-                {Array.from({ length: tvShow.number_of_seasons || 0 }, (_, i) => i + 1).map((season) => (
-                  <option key={season} value={season}>
-                    Season {season}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="detail-select-field">
-              <span>Episode</span>
-              <select
-                value={episodeNumber}
-                onChange={(e) => setEpisodeNumber(Number(e.target.value))}
-                disabled={episodesCount === 0}
-              >
-                {Array.from({ length: episodesCount || 0 }, (_, i) => i + 1).map((episode) => (
-                  <option key={episode} value={episode}>
-                    Episode {episode}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <button onClick={handleDownload} disabled={isDownloading}>
-              {isDownloading ? "Decoding..." : "Download"}
-            </button>
-          </>
-        }
-      />
-
-      <DownloadModal
-        isOpen={isDownloadModalOpen}
-        title={downloadTitle}
-        error={downloadError}
-        sources={downloadSources}
-        subtitles={downloadSubtitles}
-        fallbackName={title}
-        onClose={() => setIsDownloadModalOpen(false)}
-      />
-    </>
+    <MediaDetailShell
+      title={tvShow.name || "Untitled"}
+      embedUrl={`https://player.videasy.net/tv/${tvId}/${seasonNumber}/${episodeNumber}?${tvQuery.toString()}`}
+    />
   );
 }

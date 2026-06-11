@@ -1,15 +1,26 @@
 import React from "react";
+import Link from "next/link";
 
 export default function Footer() {
   return (
     <footer className="footer">
-      <div>
+      <div className="footer-inner">
+        <span className="footer-brand">ImpactStream</span>
+        <div className="footer-links">
+          <Link href="/">Home</Link>
+          <Link href="/live-tv">Live TV</Link>
+          <a
+            href="https://github.com/LaganYT/ImpactStream"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            GitHub
+          </a>
+        </div>
         <span>
-          &copy;{new Date().getFullYear()}  ImpactStream.
+          &copy;{new Date().getFullYear()} ImpactStream. Made with ❤️ for streaming
+          enthusiasts.
         </span>
-      </div>
-      <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', opacity: 0.7 }}>
-        <span>Made with ❤️ for streaming enthusiasts</span>
       </div>
     </footer>
   );

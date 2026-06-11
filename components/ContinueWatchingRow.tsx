@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import Link from "next/link";
 
 export type ContinueWatchingEntry = {
   key: string;
@@ -16,7 +15,7 @@ export type ContinueWatchingEntry = {
   updatedAt: string;
 };
 
-function buildDetailUrl(entry: ContinueWatchingEntry): string {
+function buildResumeUrl(entry: ContinueWatchingEntry): string {
   const { mediaType, tmdbId } = entry;
   if (mediaType === "movie") return `/movie/${tmdbId}`;
   if (mediaType === "tv") return `/tv/${tmdbId}`;
@@ -56,10 +55,9 @@ function formatProgress(timestamp: number, duration: number): string {
 
 type Props = {
   maxItems?: number;
-  showViewAll?: boolean;
 };
 
-export default function ContinueWatchingRow({ maxItems = 12, showViewAll = true }: Props) {
+export default function ContinueWatchingRow({ maxItems = 12 }: Props) {
   const router = useRouter();
   const [entries, setEntries] = useState<ContinueWatchingEntry[]>([]);
   const [mounted, setMounted] = useState(false);
@@ -143,18 +141,13 @@ export default function ContinueWatchingRow({ maxItems = 12, showViewAll = true 
     <div className="category discover-category cw-section">
       <div className="cw-section-header">
         <h3 className="cw-heading">Continue Watching</h3>
-        {showViewAll && entries.length > 0 && (
-          <Link href="/continue-watching" className="cw-view-all">
-            View all ({entries.length})
-          </Link>
-        )}
       </div>
       <div className="category-scroll">
         {visible.map((entry) => {
           const posterUrl = entry.posterPath
             ? `https://image.tmdb.org/t/p/w500${entry.posterPath}`
             : "/no-image.svg";
-          const url = buildDetailUrl(entry);
+          const url = buildResumeUrl(entry);
           const progressPct = Math.min(100, Math.max(0, entry.progress));
           const subtitle =
             entry.mediaType === "tv" || entry.mediaType === "anime:tv"
