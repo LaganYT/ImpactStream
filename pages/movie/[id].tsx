@@ -6,7 +6,8 @@ import {
   SourceItem,
   SubtitleItem,
 } from "../../utils/videasyDownloader";
-import { getDetailRoute, RoutableMediaItem } from "../../utils/mediaRouting";
+import { getMediaType, isAnimeItem, RoutableMediaItem } from "../../utils/mediaRouting";
+import { useTitleModal } from "../../components/TitleModal";
 import MediaDetailShell from "../../components/MediaDetailShell";
 import DownloadModal from "../../components/DownloadModal";
 import MediaRow, { MediaRowItem } from "../../components/MediaRow";
@@ -29,7 +30,6 @@ type MovieDetails = {
   runtime?: number;
   genres?: { id: number; name: string }[];
   imdb_id?: string;
-  credits?: { cast?: { name: string }[] };
   recommendations?: { results?: RecommendationItem[] };
 };
 
@@ -43,9 +43,9 @@ function formatRuntime(minutes?: number): string | null {
 
 export default function MovieDetailsPage() {
   const router = useRouter();
+  const { openTitle } = useTitleModal();
   const { id } = router.query;
   const [movie, setMovie] = useState<MovieDetails | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [resumeSeconds, setResumeSeconds] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
@@ -53,11 +53,6 @@ export default function MovieDetailsPage() {
   const [downloadSubtitles, setDownloadSubtitles] = useState<SubtitleItem[]>([]);
   const [downloadError, setDownloadError] = useState("");
   const [downloadTitle, setDownloadTitle] = useState("");
-
-  useEffect(() => {
-    if (!router.isReady) return;
-    if (router.query.play === "1") setIsPlaying(true);
-  }, [router.isReady, router.query.play]);
 
   useEffect(() => {
     if (!id) return;
@@ -130,7 +125,7 @@ export default function MovieDetailsPage() {
       const { data } = await axios.get(`https://api.themoviedb.org/3/movie/${id}`, {
         params: {
           api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY,
-          append_to_response: "credits,recommendations",
+          append_to_response: "recommendations",
         },
       });
       setMovie(data);
@@ -173,33 +168,12 @@ export default function MovieDetailsPage() {
   }, [id, movie]);
 
   const title = movie?.title || "Untitled";
-  const releaseDate = movie?.release_date || "Unknown";
   const year = movie?.release_date?.slice(0, 4);
   const runtimeLabel = formatRuntime(movie?.runtime);
-  const posterUrl = movie?.poster_path
-    ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
-    : "/no-image.svg";
-  const backdropUrl = movie?.backdrop_path
-    ? `https://image.tmdb.org/t/p/original${movie.backdrop_path}`
-    : undefined;
-
-  const metadata = useMemo(
-    () => [
-      { label: "Release date", value: releaseDate },
-      { label: "Rating", value: movie?.vote_average ? movie.vote_average.toFixed(1) : "N/A" },
-      { label: "Runtime", value: runtimeLabel || "Unknown" },
-    ],
-    [movie?.vote_average, releaseDate, runtimeLabel]
-  );
 
   const tags = useMemo(
     () => (movie?.genres || []).slice(0, 6).map((genre) => genre.name),
     [movie?.genres]
-  );
-
-  const cast = useMemo(
-    () => (movie?.credits?.cast || []).slice(0, 5).map((person) => person.name),
-    [movie?.credits]
   );
 
   const recommendations = useMemo(
@@ -217,7 +191,9 @@ export default function MovieDetailsPage() {
 
   const handleRecommendationClick = (row: MediaRowItem) => {
     const match = recommendations.find((item) => item.id === row.id);
-    if (match) router.push(getDetailRoute(match));
+    if (match) {
+      openTitle({ id: match.id, mediaType: getMediaType(match), isAnime: isAnimeItem(match) });
+    }
   };
 
   if (!movie) return <div className="loading">Loading...</div>;
@@ -270,16 +246,9 @@ export default function MovieDetailsPage() {
         title={title}
         summary={movie.overview || "No overview is available for this title yet."}
         embedUrl={`https://player.videasy.net/movie/${movieId}?${movieQuery.toString()}`}
-        posterUrl={posterUrl}
-        backdropUrl={backdropUrl}
         rating={movie.vote_average}
         metaItems={[year, runtimeLabel].filter(Boolean) as string[]}
-        metadata={metadata}
         tags={tags}
-        cast={cast}
-        isPlaying={isPlaying}
-        onPlay={() => setIsPlaying(true)}
-        playLabel={resumeSeconds > 0 ? "Resume" : "Play"}
         actions={
           <button className="btn-more-info" onClick={handleDownload} disabled={isDownloading}>
             {isDownloading ? "Decoding..." : "Download"}

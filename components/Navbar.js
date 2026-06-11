@@ -1,13 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
-import { FaGithub, FaTv, FaHome, FaSearch, FaBars, FaTimes, FaDragon, FaHistory } from "react-icons/fa";
+import { FaGithub, FaTv, FaHome, FaSearch, FaBars, FaTimes } from "react-icons/fa";
 
 const NAV_ITEMS = [
   { href: "/", label: "Home", icon: FaHome },
-  { href: "/anime", label: "Anime", icon: FaDragon },
   { href: "/live-tv", label: "Live TV", icon: FaTv },
-  { href: "/continue-watching", label: "Continue Watching", icon: FaHistory },
 ];
 
 export default function Navbar({ query, setQuery, onSearch }) {

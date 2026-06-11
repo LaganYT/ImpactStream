@@ -6,7 +6,8 @@ import {
   SourceItem,
   SubtitleItem,
 } from "../../utils/videasyDownloader";
-import { getDetailRoute, RoutableMediaItem } from "../../utils/mediaRouting";
+import { getMediaType, isAnimeItem, RoutableMediaItem } from "../../utils/mediaRouting";
+import { useTitleModal } from "../../components/TitleModal";
 import MediaDetailShell from "../../components/MediaDetailShell";
 import DownloadModal from "../../components/DownloadModal";
 import EpisodeList, { EpisodeInfo } from "../../components/EpisodeList";
@@ -41,7 +42,6 @@ type AnimeDetails = {
   external_ids?: {
     imdb_id?: string;
   };
-  credits?: { cast?: { name: string }[] };
   recommendations?: { results?: RecommendationItem[] };
 };
 
@@ -69,6 +69,7 @@ function formatRuntime(minutes?: number): string | null {
 
 export default function AnimeDetailsPage() {
   const router = useRouter();
+  const { openTitle } = useTitleModal();
   const { id, type } = router.query;
 
   const animeType: AnimeType = type === "movie" ? "movie" : "tv";
@@ -77,7 +78,6 @@ export default function AnimeDetailsPage() {
   const [seasonNumber, setSeasonNumber] = useState(1);
   const [episodeNumber, setEpisodeNumber] = useState(1);
   const [episodes, setEpisodes] = useState<EpisodeInfo[]>([]);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [resumeSeconds, setResumeSeconds] = useState(0);
   const [isProgressLoaded, setIsProgressLoaded] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -88,18 +88,13 @@ export default function AnimeDetailsPage() {
   const [downloadTitle, setDownloadTitle] = useState("");
 
   useEffect(() => {
-    if (!router.isReady) return;
-    if (router.query.play === "1") setIsPlaying(true);
-  }, [router.isReady, router.query.play]);
-
-  useEffect(() => {
     if (!id) return;
 
     const fetchDetails = async () => {
       const { data } = await axios.get(`https://api.themoviedb.org/3/${animeType}/${id}`, {
         params: {
           api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY,
-          append_to_response: "external_ids,credits,recommendations",
+          append_to_response: "external_ids,recommendations",
         },
       });
       setAnime(data);
@@ -153,16 +148,13 @@ export default function AnimeDetailsPage() {
 
     try {
       const stored = window.localStorage.getItem(storageKey);
-      if (!stored) {
-        setIsProgressLoaded(true);
-        return;
-      }
-
-      const parsed = JSON.parse(stored) as {
-        seasonNumber?: number;
-        episodeNumber?: number;
-        timestamp?: number;
-      };
+      const parsed = stored
+        ? (JSON.parse(stored) as {
+            seasonNumber?: number;
+            episodeNumber?: number;
+            timestamp?: number;
+          })
+        : {};
       const savedSeason = Number(parsed?.seasonNumber);
       const savedEpisode = Number(parsed?.episodeNumber);
       const savedTimestamp = Math.floor(Number(parsed?.timestamp || 0));
@@ -179,6 +171,14 @@ export default function AnimeDetailsPage() {
     } catch {
       // Ignore invalid localStorage data.
     } finally {
+      const querySeason = Number(
+        Array.isArray(router.query.season) ? router.query.season[0] : router.query.season
+      );
+      const queryEpisode = Number(
+        Array.isArray(router.query.episode) ? router.query.episode[0] : router.query.episode
+      );
+      if (Number.isFinite(querySeason) && querySeason > 0) setSeasonNumber(querySeason);
+      if (Number.isFinite(queryEpisode) && queryEpisode > 0) setEpisodeNumber(queryEpisode);
       setIsProgressLoaded(true);
     }
   }, [id, animeType]);
@@ -357,12 +357,6 @@ export default function AnimeDetailsPage() {
   const year = (anime?.release_date || anime?.first_air_date || "").slice(0, 4) || undefined;
   const runtime = anime?.runtime || anime?.episode_run_time?.[0];
   const runtimeLabel = formatRuntime(runtime);
-  const posterUrl = anime?.poster_path
-    ? `https://image.tmdb.org/t/p/w500${anime.poster_path}`
-    : "/no-image.svg";
-  const backdropUrl = anime?.backdrop_path
-    ? `https://image.tmdb.org/t/p/original${anime.backdrop_path}`
-    : undefined;
 
   const streamUrl = useMemo(() => {
     if (!id) return "";
@@ -394,38 +388,9 @@ export default function AnimeDetailsPage() {
     return `https://player.videasy.net/tv/${mediaId}/${seasonNumber}/${episodeNumber}?${query.toString()}`;
   }, [id, animeType, seasonNumber, episodeNumber, resumeSeconds]);
 
-  const metadata = useMemo(() => {
-    const base = [
-      { label: "Release date", value: releaseDate },
-      { label: "Rating", value: anime?.vote_average ? anime.vote_average.toFixed(1) : "N/A" },
-    ];
-
-    if (animeType === "movie") {
-      return [...base, { label: "Runtime", value: runtimeLabel || "Unknown" }];
-    }
-
-    return [
-      ...base,
-      { label: "Episodes", value: anime?.number_of_episodes ? String(anime.number_of_episodes) : "N/A" },
-      { label: "Seasons", value: anime?.number_of_seasons ? String(anime.number_of_seasons) : "N/A" },
-    ];
-  }, [
-    anime?.number_of_episodes,
-    anime?.number_of_seasons,
-    anime?.vote_average,
-    animeType,
-    releaseDate,
-    runtimeLabel,
-  ]);
-
   const tags = useMemo(
     () => ["Anime", ...(anime?.genres || []).slice(0, 5).map((genre) => genre.name)],
     [anime?.genres]
-  );
-
-  const cast = useMemo(
-    () => (anime?.credits?.cast || []).slice(0, 5).map((person) => person.name),
-    [anime?.credits]
   );
 
   const recommendations = useMemo(
@@ -443,7 +408,9 @@ export default function AnimeDetailsPage() {
 
   const handleRecommendationClick = (row: MediaRowItem) => {
     const match = recommendations.find((item) => item.id === row.id);
-    if (match) router.push(getDetailRoute(match));
+    if (match) {
+      openTitle({ id: match.id, mediaType: getMediaType(match), isAnime: isAnimeItem(match) });
+    }
   };
 
   if (!anime) return <div className="loading">Loading...</div>;
@@ -486,16 +453,6 @@ export default function AnimeDetailsPage() {
   };
 
   const activeEpisode = episodes.find((episode) => episode.episode_number === episodeNumber);
-  const playLabel =
-    animeType === "tv"
-      ? resumeSeconds > 0
-        ? `Resume S${seasonNumber} E${episodeNumber}`
-        : seasonNumber > 1 || episodeNumber > 1
-        ? `Play S${seasonNumber} E${episodeNumber}`
-        : "Play"
-      : resumeSeconds > 0
-      ? "Resume"
-      : "Play";
 
   const metaItems =
     animeType === "movie"
@@ -514,16 +471,9 @@ export default function AnimeDetailsPage() {
         title={title}
         summary={anime.overview || "No overview is available for this anime yet."}
         embedUrl={streamUrl}
-        posterUrl={posterUrl}
-        backdropUrl={backdropUrl}
         rating={anime.vote_average}
         metaItems={metaItems}
-        metadata={metadata}
         tags={tags}
-        cast={cast}
-        isPlaying={isPlaying}
-        onPlay={() => setIsPlaying(true)}
-        playLabel={playLabel}
         actions={
           <button className="btn-more-info" onClick={handleDownload} disabled={isDownloading}>
             {isDownloading ? "Decoding..." : "Download"}
@@ -554,10 +504,7 @@ export default function AnimeDetailsPage() {
             season={seasonNumber}
             activeEpisode={episodeNumber}
             onSeasonChange={(season) => setSeasonNumber(season)}
-            onEpisodeSelect={(episode) => {
-              setEpisodeNumber(episode);
-              setIsPlaying(true);
-            }}
+            onEpisodeSelect={(episode) => setEpisodeNumber(episode)}
           />
         ) : null}
       </MediaDetailShell>

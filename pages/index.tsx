@@ -5,6 +5,7 @@ import ContinueWatchingRow from "../components/ContinueWatchingRow";
 import MediaRow, { MediaRowItem } from "../components/MediaRow";
 import Billboard, { BillboardItem } from "../components/Billboard";
 import { getDetailRoute, getMediaType, isAnimeItem } from "../utils/mediaRouting";
+import { useTitleModal } from "../components/TitleModal";
 
 type MediaType = "movie" | "tv";
 
@@ -47,6 +48,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
+  const { openTitle } = useTitleModal();
 
   const decorateResults = (items: MediaItem[], forcedType?: MediaType) =>
     items
@@ -169,8 +171,12 @@ export default function Home() {
     [trending]
   );
 
-  const openDetails = (item: MediaItem, play = false) => {
-    router.push(getDetailRoute(item, { play }));
+  const openInfo = (item: MediaItem) => {
+    openTitle({ id: item.id, mediaType: getMediaType(item), isAnime: isAnimeItem(item) });
+  };
+
+  const playNow = (item: MediaItem) => {
+    router.push(getDetailRoute(item));
   };
 
   const handleRefinedSearch = () => {
@@ -200,7 +206,9 @@ export default function Home() {
 
   const handleBillboardAction = (play: boolean) => (billboardItem: BillboardItem) => {
     const match = featured.find((item) => itemKey(item) === billboardItem.id);
-    if (match) openDetails(match, play);
+    if (!match) return;
+    if (play) playNow(match);
+    else openInfo(match);
   };
 
   const toRowItems = (items: MediaItem[]): MediaRowItem[] =>
@@ -214,7 +222,7 @@ export default function Home() {
 
   const handleRowClick = (items: MediaItem[]) => (row: MediaRowItem) => {
     const match = items.find((item) => itemKey(item) === row.id);
-    if (match) openDetails(match);
+    if (match) openInfo(match);
   };
 
   return (
@@ -284,7 +292,7 @@ export default function Home() {
                 <article
                   key={itemKey(item)}
                   className="discover-card"
-                  onClick={() => openDetails(item)}
+                  onClick={() => openInfo(item)}
                 >
                   <img src={getPoster(item)} alt={getTitle(item)} />
                   <div className="discover-card-content">
@@ -315,7 +323,7 @@ export default function Home() {
           <main className="home-rows">
             {error ? <p className="discover-error">{error}</p> : null}
 
-            <ContinueWatchingRow maxItems={12} showViewAll={true} />
+            <ContinueWatchingRow maxItems={12} />
 
             {Object.entries(categories).map(([key, items]) => (
               <MediaRow

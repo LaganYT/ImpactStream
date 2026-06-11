@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import "../styles/globals.css";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
+import { TitleModalProvider } from "../components/TitleModal";
 
 export default function App({ Component, pageProps }: AppProps) {
   const [query, setQuery] = useState("");
@@ -17,12 +18,12 @@ export default function App({ Component, pageProps }: AppProps) {
   }, []);
 
   return (
-    <>
+    <TitleModalProvider>
       <Navbar query={query} setQuery={setQuery} onSearch={onSearch} />
       <div className="app-content">
         <Component {...pageProps} />
       </div>
       <Footer />
-    </>
+    </TitleModalProvider>
   );
 }

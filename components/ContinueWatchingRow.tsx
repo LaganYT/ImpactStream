@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import Link from "next/link";
 
 export type ContinueWatchingEntry = {
   key: string;
@@ -18,10 +17,10 @@ export type ContinueWatchingEntry = {
 
 function buildResumeUrl(entry: ContinueWatchingEntry): string {
   const { mediaType, tmdbId } = entry;
-  if (mediaType === "movie") return `/movie/${tmdbId}?play=1`;
-  if (mediaType === "tv") return `/tv/${tmdbId}?play=1`;
-  if (mediaType === "anime:movie") return `/anime/${tmdbId}?type=movie&play=1`;
-  if (mediaType === "anime:tv") return `/anime/${tmdbId}?type=tv&play=1`;
+  if (mediaType === "movie") return `/movie/${tmdbId}`;
+  if (mediaType === "tv") return `/tv/${tmdbId}`;
+  if (mediaType === "anime:movie") return `/anime/${tmdbId}?type=movie`;
+  if (mediaType === "anime:tv") return `/anime/${tmdbId}?type=tv`;
   return `/`;
 }
 
@@ -56,10 +55,9 @@ function formatProgress(timestamp: number, duration: number): string {
 
 type Props = {
   maxItems?: number;
-  showViewAll?: boolean;
 };
 
-export default function ContinueWatchingRow({ maxItems = 12, showViewAll = true }: Props) {
+export default function ContinueWatchingRow({ maxItems = 12 }: Props) {
   const router = useRouter();
   const [entries, setEntries] = useState<ContinueWatchingEntry[]>([]);
   const [mounted, setMounted] = useState(false);
@@ -143,11 +141,6 @@ export default function ContinueWatchingRow({ maxItems = 12, showViewAll = true 
     <div className="category discover-category cw-section">
       <div className="cw-section-header">
         <h3 className="cw-heading">Continue Watching</h3>
-        {showViewAll && entries.length > 0 && (
-          <Link href="/continue-watching" className="cw-view-all">
-            View all ({entries.length})
-          </Link>
-        )}
       </div>
       <div className="category-scroll">
         {visible.map((entry) => {

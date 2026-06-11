@@ -6,7 +6,8 @@ import {
   SourceItem,
   SubtitleItem,
 } from "../../utils/videasyDownloader";
-import { getDetailRoute, RoutableMediaItem } from "../../utils/mediaRouting";
+import { getMediaType, isAnimeItem, RoutableMediaItem } from "../../utils/mediaRouting";
+import { useTitleModal } from "../../components/TitleModal";
 import MediaDetailShell from "../../components/MediaDetailShell";
 import DownloadModal from "../../components/DownloadModal";
 import EpisodeList, { EpisodeInfo } from "../../components/EpisodeList";
@@ -31,7 +32,6 @@ type TVDetails = {
   number_of_seasons?: number;
   number_of_episodes?: number;
   genres?: { id: number; name: string }[];
-  credits?: { cast?: { name: string }[] };
   recommendations?: { results?: RecommendationItem[] };
 };
 
@@ -51,12 +51,12 @@ function shouldTrackContinueWatching(input: {
 
 export default function TVDetailsPage() {
   const router = useRouter();
+  const { openTitle } = useTitleModal();
   const { id } = router.query;
   const [tvShow, setTVShow] = useState<TVDetails | null>(null);
   const [seasonNumber, setSeasonNumber] = useState(1);
   const [episodeNumber, setEpisodeNumber] = useState(1);
   const [episodes, setEpisodes] = useState<EpisodeInfo[]>([]);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [resumeSeconds, setResumeSeconds] = useState(0);
   const [isProgressLoaded, setIsProgressLoaded] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -67,18 +67,13 @@ export default function TVDetailsPage() {
   const [downloadTitle, setDownloadTitle] = useState("");
 
   useEffect(() => {
-    if (!router.isReady) return;
-    if (router.query.play === "1") setIsPlaying(true);
-  }, [router.isReady, router.query.play]);
-
-  useEffect(() => {
     if (!id) return;
 
     const fetchTVShow = async () => {
       const { data } = await axios.get(`https://api.themoviedb.org/3/tv/${id}`, {
         params: {
           api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY,
-          append_to_response: "credits,recommendations",
+          append_to_response: "recommendations",
         },
       });
       setTVShow(data);
@@ -129,16 +124,13 @@ export default function TVDetailsPage() {
 
     try {
       const stored = window.localStorage.getItem(storageKey);
-      if (!stored) {
-        setIsProgressLoaded(true);
-        return;
-      }
-
-      const parsed = JSON.parse(stored) as {
-        seasonNumber?: number;
-        episodeNumber?: number;
-        timestamp?: number;
-      };
+      const parsed = stored
+        ? (JSON.parse(stored) as {
+            seasonNumber?: number;
+            episodeNumber?: number;
+            timestamp?: number;
+          })
+        : {};
       const savedSeason = Number(parsed?.seasonNumber);
       const savedEpisode = Number(parsed?.episodeNumber);
       const savedTimestamp = Math.floor(Number(parsed?.timestamp || 0));
@@ -155,6 +147,14 @@ export default function TVDetailsPage() {
     } catch {
       // Ignore invalid localStorage data.
     } finally {
+      const querySeason = Number(
+        Array.isArray(router.query.season) ? router.query.season[0] : router.query.season
+      );
+      const queryEpisode = Number(
+        Array.isArray(router.query.episode) ? router.query.episode[0] : router.query.episode
+      );
+      if (Number.isFinite(querySeason) && querySeason > 0) setSeasonNumber(querySeason);
+      if (Number.isFinite(queryEpisode) && queryEpisode > 0) setEpisodeNumber(queryEpisode);
       setIsProgressLoaded(true);
     }
   }, [id]);
@@ -326,33 +326,11 @@ export default function TVDetailsPage() {
   }, [id, isProgressLoaded, seasonNumber, episodeNumber]);
 
   const title = tvShow?.name || "Untitled";
-  const releaseDate = tvShow?.first_air_date || "Unknown";
   const year = tvShow?.first_air_date?.slice(0, 4);
-  const posterUrl = tvShow?.poster_path
-    ? `https://image.tmdb.org/t/p/w500${tvShow.poster_path}`
-    : "/no-image.svg";
-  const backdropUrl = tvShow?.backdrop_path
-    ? `https://image.tmdb.org/t/p/original${tvShow.backdrop_path}`
-    : undefined;
-
-  const metadata = useMemo(
-    () => [
-      { label: "First air date", value: releaseDate },
-      { label: "Rating", value: tvShow?.vote_average ? tvShow.vote_average.toFixed(1) : "N/A" },
-      { label: "Episodes", value: tvShow?.number_of_episodes ? String(tvShow.number_of_episodes) : "N/A" },
-      { label: "Seasons", value: tvShow?.number_of_seasons ? String(tvShow.number_of_seasons) : "N/A" },
-    ],
-    [releaseDate, tvShow?.number_of_episodes, tvShow?.number_of_seasons, tvShow?.vote_average]
-  );
 
   const tags = useMemo(
     () => (tvShow?.genres || []).slice(0, 6).map((genre) => genre.name),
     [tvShow?.genres]
-  );
-
-  const cast = useMemo(
-    () => (tvShow?.credits?.cast || []).slice(0, 5).map((person) => person.name),
-    [tvShow?.credits]
   );
 
   const recommendations = useMemo(
@@ -370,7 +348,9 @@ export default function TVDetailsPage() {
 
   const handleRecommendationClick = (row: MediaRowItem) => {
     const match = recommendations.find((item) => item.id === row.id);
-    if (match) router.push(getDetailRoute(match));
+    if (match) {
+      openTitle({ id: match.id, mediaType: getMediaType(match), isAnime: isAnimeItem(match) });
+    }
   };
 
   if (!tvShow) return <div className="loading">Loading...</div>;
@@ -422,12 +402,6 @@ export default function TVDetailsPage() {
   };
 
   const activeEpisode = episodes.find((episode) => episode.episode_number === episodeNumber);
-  const playLabel =
-    resumeSeconds > 0
-      ? `Resume S${seasonNumber} E${episodeNumber}`
-      : seasonNumber > 1 || episodeNumber > 1
-      ? `Play S${seasonNumber} E${episodeNumber}`
-      : "Play";
 
   return (
     <>
@@ -436,8 +410,6 @@ export default function TVDetailsPage() {
         title={title}
         summary={tvShow.overview || "No overview is available for this series yet."}
         embedUrl={`https://player.videasy.net/tv/${tvId}/${seasonNumber}/${episodeNumber}?${tvQuery.toString()}`}
-        posterUrl={posterUrl}
-        backdropUrl={backdropUrl}
         rating={tvShow.vote_average}
         metaItems={
           [
@@ -447,12 +419,7 @@ export default function TVDetailsPage() {
               : null,
           ].filter(Boolean) as string[]
         }
-        metadata={metadata}
         tags={tags}
-        cast={cast}
-        isPlaying={isPlaying}
-        onPlay={() => setIsPlaying(true)}
-        playLabel={playLabel}
         actions={
           <button className="btn-more-info" onClick={handleDownload} disabled={isDownloading}>
             {isDownloading ? "Decoding..." : "Download"}
@@ -480,10 +447,7 @@ export default function TVDetailsPage() {
           season={seasonNumber}
           activeEpisode={episodeNumber}
           onSeasonChange={(season) => setSeasonNumber(season)}
-          onEpisodeSelect={(episode) => {
-            setEpisodeNumber(episode);
-            setIsPlaying(true);
-          }}
+          onEpisodeSelect={(episode) => setEpisodeNumber(episode)}
         />
       </MediaDetailShell>
 
