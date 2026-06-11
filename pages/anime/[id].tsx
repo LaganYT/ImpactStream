@@ -6,10 +6,22 @@ import {
   SourceItem,
   SubtitleItem,
 } from "../../utils/videasyDownloader";
+import { getDetailRoute, RoutableMediaItem } from "../../utils/mediaRouting";
 import MediaDetailShell from "../../components/MediaDetailShell";
 import DownloadModal from "../../components/DownloadModal";
+import EpisodeList, { EpisodeInfo } from "../../components/EpisodeList";
+import MediaRow, { MediaRowItem } from "../../components/MediaRow";
 
 type AnimeType = "movie" | "tv";
+
+type RecommendationItem = RoutableMediaItem & {
+  title?: string;
+  name?: string;
+  poster_path?: string;
+  release_date?: string;
+  first_air_date?: string;
+  vote_average?: number;
+};
 
 type AnimeDetails = {
   title?: string;
@@ -29,6 +41,8 @@ type AnimeDetails = {
   external_ids?: {
     imdb_id?: string;
   };
+  credits?: { cast?: { name: string }[] };
+  recommendations?: { results?: RecommendationItem[] };
 };
 
 function shouldTrackContinueWatching(input: {
@@ -45,6 +59,14 @@ function shouldTrackContinueWatching(input: {
   return timestamp > 0 || progress > 0 || season !== 1 || episode !== 1;
 }
 
+function formatRuntime(minutes?: number): string | null {
+  if (!minutes || minutes <= 0) return null;
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (hours === 0) return `${mins}m`;
+  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+}
+
 export default function AnimeDetailsPage() {
   const router = useRouter();
   const { id, type } = router.query;
@@ -54,7 +76,8 @@ export default function AnimeDetailsPage() {
   const [anime, setAnime] = useState<AnimeDetails | null>(null);
   const [seasonNumber, setSeasonNumber] = useState(1);
   const [episodeNumber, setEpisodeNumber] = useState(1);
-  const [episodesCount, setEpisodesCount] = useState(0);
+  const [episodes, setEpisodes] = useState<EpisodeInfo[]>([]);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [resumeSeconds, setResumeSeconds] = useState(0);
   const [isProgressLoaded, setIsProgressLoaded] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -65,13 +88,18 @@ export default function AnimeDetailsPage() {
   const [downloadTitle, setDownloadTitle] = useState("");
 
   useEffect(() => {
+    if (!router.isReady) return;
+    if (router.query.play === "1") setIsPlaying(true);
+  }, [router.isReady, router.query.play]);
+
+  useEffect(() => {
     if (!id) return;
 
     const fetchDetails = async () => {
       const { data } = await axios.get(`https://api.themoviedb.org/3/${animeType}/${id}`, {
         params: {
           api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY,
-          append_to_response: "external_ids",
+          append_to_response: "external_ids,credits,recommendations",
         },
       });
       setAnime(data);
@@ -163,15 +191,15 @@ export default function AnimeDetailsPage() {
         const { data } = await axios.get(`https://api.themoviedb.org/3/tv/${id}/season/${seasonNumber}`, {
           params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY },
         });
-        const count = Array.isArray(data.episodes) ? data.episodes.length : 0;
-        setEpisodesCount(count);
+        const seasonEpisodes: EpisodeInfo[] = Array.isArray(data.episodes) ? data.episodes : [];
+        setEpisodes(seasonEpisodes);
         setEpisodeNumber((current) => {
-          if (count === 0) return 0;
-          if (current > count) return 1;
+          if (seasonEpisodes.length === 0) return 0;
+          if (current > seasonEpisodes.length) return 1;
           return current > 0 ? current : 1;
         });
       } catch {
-        setEpisodesCount(0);
+        setEpisodes([]);
         setEpisodeNumber(0);
       }
     };
@@ -324,13 +352,11 @@ export default function AnimeDetailsPage() {
     }
   }, [id, animeType, isProgressLoaded, seasonNumber, episodeNumber]);
 
-  const handleSeasonChange = (value: number) => {
-    setSeasonNumber(value);
-  };
-
   const title = anime?.title || anime?.name || "Untitled";
   const releaseDate = anime?.release_date || anime?.first_air_date || "Unknown";
+  const year = (anime?.release_date || anime?.first_air_date || "").slice(0, 4) || undefined;
   const runtime = anime?.runtime || anime?.episode_run_time?.[0];
+  const runtimeLabel = formatRuntime(runtime);
   const posterUrl = anime?.poster_path
     ? `https://image.tmdb.org/t/p/w500${anime.poster_path}`
     : "/no-image.svg";
@@ -359,7 +385,6 @@ export default function AnimeDetailsPage() {
       color: "e50914",
       autoplay: "true",
       nextEpisode: "true",
-      episodeSelector: "true",
       autoplayNextEpisode: "true",
       overlay: "true",
     });
@@ -371,12 +396,12 @@ export default function AnimeDetailsPage() {
 
   const metadata = useMemo(() => {
     const base = [
-      { label: "Release", value: releaseDate },
+      { label: "Release date", value: releaseDate },
       { label: "Rating", value: anime?.vote_average ? anime.vote_average.toFixed(1) : "N/A" },
     ];
 
     if (animeType === "movie") {
-      return [...base, { label: "Runtime", value: runtime ? `${runtime} min` : "Unknown" }];
+      return [...base, { label: "Runtime", value: runtimeLabel || "Unknown" }];
     }
 
     return [
@@ -390,13 +415,36 @@ export default function AnimeDetailsPage() {
     anime?.vote_average,
     animeType,
     releaseDate,
-    runtime,
+    runtimeLabel,
   ]);
 
   const tags = useMemo(
     () => ["Anime", ...(anime?.genres || []).slice(0, 5).map((genre) => genre.name)],
     [anime?.genres]
   );
+
+  const cast = useMemo(
+    () => (anime?.credits?.cast || []).slice(0, 5).map((person) => person.name),
+    [anime?.credits]
+  );
+
+  const recommendations = useMemo(
+    () => (anime?.recommendations?.results || []).filter((item) => item.poster_path),
+    [anime?.recommendations]
+  );
+
+  const recommendationRowItems: MediaRowItem[] = recommendations.slice(0, 18).map((item) => ({
+    id: item.id,
+    title: item.name || item.title || "Untitled",
+    posterUrl: `https://image.tmdb.org/t/p/w500${item.poster_path}`,
+    year: (item.first_air_date || item.release_date || "").slice(0, 4) || undefined,
+    rating: item.vote_average,
+  }));
+
+  const handleRecommendationClick = (row: MediaRowItem) => {
+    const match = recommendations.find((item) => item.id === row.id);
+    if (match) router.push(getDetailRoute(match));
+  };
 
   if (!anime) return <div className="loading">Loading...</div>;
 
@@ -437,6 +485,28 @@ export default function AnimeDetailsPage() {
     }
   };
 
+  const activeEpisode = episodes.find((episode) => episode.episode_number === episodeNumber);
+  const playLabel =
+    animeType === "tv"
+      ? resumeSeconds > 0
+        ? `Resume S${seasonNumber} E${episodeNumber}`
+        : seasonNumber > 1 || episodeNumber > 1
+        ? `Play S${seasonNumber} E${episodeNumber}`
+        : "Play"
+      : resumeSeconds > 0
+      ? "Resume"
+      : "Play";
+
+  const metaItems =
+    animeType === "movie"
+      ? ([year, runtimeLabel].filter(Boolean) as string[])
+      : ([
+          year,
+          anime.number_of_seasons
+            ? `${anime.number_of_seasons} Season${anime.number_of_seasons > 1 ? "s" : ""}`
+            : null,
+        ].filter(Boolean) as string[]);
+
   return (
     <>
       <MediaDetailShell
@@ -446,48 +516,51 @@ export default function AnimeDetailsPage() {
         embedUrl={streamUrl}
         posterUrl={posterUrl}
         backdropUrl={backdropUrl}
+        rating={anime.vote_average}
+        metaItems={metaItems}
         metadata={metadata}
         tags={tags}
-        controls={
+        cast={cast}
+        isPlaying={isPlaying}
+        onPlay={() => setIsPlaying(true)}
+        playLabel={playLabel}
+        actions={
+          <button className="btn-more-info" onClick={handleDownload} disabled={isDownloading}>
+            {isDownloading ? "Decoding..." : "Download"}
+          </button>
+        }
+        infoNote={
           animeType === "tv" ? (
             <>
-              <label className="detail-select-field">
-                <span>Season</span>
-                <select value={seasonNumber} onChange={(e) => handleSeasonChange(Number(e.target.value))}>
-                  {Array.from({ length: anime.number_of_seasons || 0 }, (_, i) => i + 1).map((season) => (
-                    <option key={season} value={season}>
-                      Season {season}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="detail-select-field">
-                <span>Episode</span>
-                <select
-                  value={episodeNumber}
-                  onChange={(e) => setEpisodeNumber(Number(e.target.value))}
-                  disabled={episodesCount === 0}
-                >
-                  {Array.from({ length: episodesCount || 0 }, (_, i) => i + 1).map((episode) => (
-                    <option key={episode} value={episode}>
-                      Episode {episode}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <button onClick={handleDownload} disabled={isDownloading}>
-                {isDownloading ? "Decoding..." : "Download"}
-              </button>
+              Now playing: S{seasonNumber} E{episodeNumber}
+              {activeEpisode?.name ? ` — ${activeEpisode.name}` : ""}
             </>
-          ) : (
-            <button onClick={handleDownload} disabled={isDownloading}>
-              {isDownloading ? "Decoding..." : "Download"}
-            </button>
-          )
+          ) : null
         }
-      />
+        recommendations={
+          recommendationRowItems.length ? (
+            <MediaRow
+              title="More Like This"
+              items={recommendationRowItems}
+              onItemClick={handleRecommendationClick}
+            />
+          ) : null
+        }
+      >
+        {animeType === "tv" ? (
+          <EpisodeList
+            episodes={episodes}
+            seasonCount={anime.number_of_seasons || 1}
+            season={seasonNumber}
+            activeEpisode={episodeNumber}
+            onSeasonChange={(season) => setSeasonNumber(season)}
+            onEpisodeSelect={(episode) => {
+              setEpisodeNumber(episode);
+              setIsPlaying(true);
+            }}
+          />
+        ) : null}
+      </MediaDetailShell>
 
       <DownloadModal
         isOpen={isDownloadModalOpen}

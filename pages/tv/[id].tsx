@@ -6,8 +6,20 @@ import {
   SourceItem,
   SubtitleItem,
 } from "../../utils/videasyDownloader";
+import { getDetailRoute, RoutableMediaItem } from "../../utils/mediaRouting";
 import MediaDetailShell from "../../components/MediaDetailShell";
 import DownloadModal from "../../components/DownloadModal";
+import EpisodeList, { EpisodeInfo } from "../../components/EpisodeList";
+import MediaRow, { MediaRowItem } from "../../components/MediaRow";
+
+type RecommendationItem = RoutableMediaItem & {
+  title?: string;
+  name?: string;
+  poster_path?: string;
+  release_date?: string;
+  first_air_date?: string;
+  vote_average?: number;
+};
 
 type TVDetails = {
   name?: string;
@@ -19,6 +31,8 @@ type TVDetails = {
   number_of_seasons?: number;
   number_of_episodes?: number;
   genres?: { id: number; name: string }[];
+  credits?: { cast?: { name: string }[] };
+  recommendations?: { results?: RecommendationItem[] };
 };
 
 function shouldTrackContinueWatching(input: {
@@ -41,7 +55,8 @@ export default function TVDetailsPage() {
   const [tvShow, setTVShow] = useState<TVDetails | null>(null);
   const [seasonNumber, setSeasonNumber] = useState(1);
   const [episodeNumber, setEpisodeNumber] = useState(1);
-  const [episodesCount, setEpisodesCount] = useState(0);
+  const [episodes, setEpisodes] = useState<EpisodeInfo[]>([]);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [resumeSeconds, setResumeSeconds] = useState(0);
   const [isProgressLoaded, setIsProgressLoaded] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -52,11 +67,19 @@ export default function TVDetailsPage() {
   const [downloadTitle, setDownloadTitle] = useState("");
 
   useEffect(() => {
+    if (!router.isReady) return;
+    if (router.query.play === "1") setIsPlaying(true);
+  }, [router.isReady, router.query.play]);
+
+  useEffect(() => {
     if (!id) return;
 
     const fetchTVShow = async () => {
       const { data } = await axios.get(`https://api.themoviedb.org/3/tv/${id}`, {
-        params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY },
+        params: {
+          api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY,
+          append_to_response: "credits,recommendations",
+        },
       });
       setTVShow(data);
     };
@@ -144,15 +167,15 @@ export default function TVDetailsPage() {
         const { data } = await axios.get(`https://api.themoviedb.org/3/tv/${id}/season/${seasonNumber}`, {
           params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY },
         });
-        const count = Array.isArray(data.episodes) ? data.episodes.length : 0;
-        setEpisodesCount(count);
+        const seasonEpisodes: EpisodeInfo[] = Array.isArray(data.episodes) ? data.episodes : [];
+        setEpisodes(seasonEpisodes);
         setEpisodeNumber((current) => {
-          if (count === 0) return 0;
-          if (current > count) return 1;
+          if (seasonEpisodes.length === 0) return 0;
+          if (current > seasonEpisodes.length) return 1;
           return current > 0 ? current : 1;
         });
       } catch {
-        setEpisodesCount(0);
+        setEpisodes([]);
         setEpisodeNumber(0);
       }
     };
@@ -302,12 +325,9 @@ export default function TVDetailsPage() {
     }
   }, [id, isProgressLoaded, seasonNumber, episodeNumber]);
 
-  const handleSeasonChange = (value: number) => {
-    setSeasonNumber(value);
-  };
-
   const title = tvShow?.name || "Untitled";
   const releaseDate = tvShow?.first_air_date || "Unknown";
+  const year = tvShow?.first_air_date?.slice(0, 4);
   const posterUrl = tvShow?.poster_path
     ? `https://image.tmdb.org/t/p/w500${tvShow.poster_path}`
     : "/no-image.svg";
@@ -317,7 +337,7 @@ export default function TVDetailsPage() {
 
   const metadata = useMemo(
     () => [
-      { label: "First Air", value: releaseDate },
+      { label: "First air date", value: releaseDate },
       { label: "Rating", value: tvShow?.vote_average ? tvShow.vote_average.toFixed(1) : "N/A" },
       { label: "Episodes", value: tvShow?.number_of_episodes ? String(tvShow.number_of_episodes) : "N/A" },
       { label: "Seasons", value: tvShow?.number_of_seasons ? String(tvShow.number_of_seasons) : "N/A" },
@@ -330,7 +350,31 @@ export default function TVDetailsPage() {
     [tvShow?.genres]
   );
 
+  const cast = useMemo(
+    () => (tvShow?.credits?.cast || []).slice(0, 5).map((person) => person.name),
+    [tvShow?.credits]
+  );
+
+  const recommendations = useMemo(
+    () => (tvShow?.recommendations?.results || []).filter((item) => item.poster_path),
+    [tvShow?.recommendations]
+  );
+
+  const recommendationRowItems: MediaRowItem[] = recommendations.slice(0, 18).map((item) => ({
+    id: item.id,
+    title: item.name || item.title || "Untitled",
+    posterUrl: `https://image.tmdb.org/t/p/w500${item.poster_path}`,
+    year: (item.first_air_date || item.release_date || "").slice(0, 4) || undefined,
+    rating: item.vote_average,
+  }));
+
+  const handleRecommendationClick = (row: MediaRowItem) => {
+    const match = recommendations.find((item) => item.id === row.id);
+    if (match) router.push(getDetailRoute(match));
+  };
+
   if (!tvShow) return <div className="loading">Loading...</div>;
+
   const tvId = Array.isArray(id) ? id[0] : id;
   const tvQuery = new URLSearchParams({
     color: "e50914",
@@ -377,6 +421,14 @@ export default function TVDetailsPage() {
     }
   };
 
+  const activeEpisode = episodes.find((episode) => episode.episode_number === episodeNumber);
+  const playLabel =
+    resumeSeconds > 0
+      ? `Resume S${seasonNumber} E${episodeNumber}`
+      : seasonNumber > 1 || episodeNumber > 1
+      ? `Play S${seasonNumber} E${episodeNumber}`
+      : "Play";
+
   return (
     <>
       <MediaDetailShell
@@ -386,42 +438,54 @@ export default function TVDetailsPage() {
         embedUrl={`https://player.videasy.net/tv/${tvId}/${seasonNumber}/${episodeNumber}?${tvQuery.toString()}`}
         posterUrl={posterUrl}
         backdropUrl={backdropUrl}
+        rating={tvShow.vote_average}
+        metaItems={
+          [
+            year,
+            tvShow.number_of_seasons
+              ? `${tvShow.number_of_seasons} Season${tvShow.number_of_seasons > 1 ? "s" : ""}`
+              : null,
+          ].filter(Boolean) as string[]
+        }
         metadata={metadata}
         tags={tags}
-        controls={
+        cast={cast}
+        isPlaying={isPlaying}
+        onPlay={() => setIsPlaying(true)}
+        playLabel={playLabel}
+        actions={
+          <button className="btn-more-info" onClick={handleDownload} disabled={isDownloading}>
+            {isDownloading ? "Decoding..." : "Download"}
+          </button>
+        }
+        infoNote={
           <>
-            <label className="detail-select-field">
-              <span>Season</span>
-              <select value={seasonNumber} onChange={(e) => handleSeasonChange(Number(e.target.value))}>
-                {Array.from({ length: tvShow.number_of_seasons || 0 }, (_, i) => i + 1).map((season) => (
-                  <option key={season} value={season}>
-                    Season {season}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="detail-select-field">
-              <span>Episode</span>
-              <select
-                value={episodeNumber}
-                onChange={(e) => setEpisodeNumber(Number(e.target.value))}
-                disabled={episodesCount === 0}
-              >
-                {Array.from({ length: episodesCount || 0 }, (_, i) => i + 1).map((episode) => (
-                  <option key={episode} value={episode}>
-                    Episode {episode}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <button onClick={handleDownload} disabled={isDownloading}>
-              {isDownloading ? "Decoding..." : "Download"}
-            </button>
+            Now playing: S{seasonNumber} E{episodeNumber}
+            {activeEpisode?.name ? ` — ${activeEpisode.name}` : ""}
           </>
         }
-      />
+        recommendations={
+          recommendationRowItems.length ? (
+            <MediaRow
+              title="More Like This"
+              items={recommendationRowItems}
+              onItemClick={handleRecommendationClick}
+            />
+          ) : null
+        }
+      >
+        <EpisodeList
+          episodes={episodes}
+          seasonCount={tvShow.number_of_seasons || 1}
+          season={seasonNumber}
+          activeEpisode={episodeNumber}
+          onSeasonChange={(season) => setSeasonNumber(season)}
+          onEpisodeSelect={(episode) => {
+            setEpisodeNumber(episode);
+            setIsPlaying(true);
+          }}
+        />
+      </MediaDetailShell>
 
       <DownloadModal
         isOpen={isDownloadModalOpen}

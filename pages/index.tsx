@@ -1,9 +1,10 @@
 import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
-import { FaInfoCircle, FaPlay, FaStar } from "react-icons/fa";
 import ContinueWatchingRow from "../components/ContinueWatchingRow";
 import MediaRow, { MediaRowItem } from "../components/MediaRow";
+import Billboard, { BillboardItem } from "../components/Billboard";
+import { getDetailRoute, getMediaType, isAnimeItem } from "../utils/mediaRouting";
 
 type MediaType = "movie" | "tv";
 
@@ -45,21 +46,14 @@ export default function Home() {
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
-  const [featuredIndex, setFeaturedIndex] = useState(0);
   const router = useRouter();
-
-  const normalizeMediaType = (item: MediaItem): MediaType =>
-    item.media_type === "tv" || Boolean(item.first_air_date) ? "tv" : "movie";
-
-  const isAnime = (item: MediaItem) =>
-    Boolean(item.genre_ids?.includes(16) && (item.original_language === "ja" || normalizeMediaType(item) === "tv"));
 
   const decorateResults = (items: MediaItem[], forcedType?: MediaType) =>
     items
       .filter((item) => item?.id)
       .map((item) => ({
         ...item,
-        media_type: forcedType || normalizeMediaType(item),
+        media_type: forcedType || getMediaType(item),
       }))
       .sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
 
@@ -162,8 +156,8 @@ export default function Home() {
 
   const filteredResults = useMemo(() => {
     if (activeFilter === "all") return searchResults;
-    if (activeFilter === "anime") return searchResults.filter((item) => isAnime(item));
-    return searchResults.filter((item) => normalizeMediaType(item) === activeFilter);
+    if (activeFilter === "anime") return searchResults.filter((item) => isAnimeItem(item));
+    return searchResults.filter((item) => getMediaType(item) === activeFilter);
   }, [activeFilter, searchResults]);
 
   const featured = useMemo(
@@ -175,25 +169,8 @@ export default function Home() {
     [trending]
   );
 
-  useEffect(() => {
-    setFeaturedIndex(0);
-    if (featured.length < 2) return;
-    const timer = setInterval(
-      () => setFeaturedIndex((current) => (current + 1) % featured.length),
-      8000
-    );
-    return () => clearInterval(timer);
-  }, [featured.length]);
-
-  const handleCardClick = (item: MediaItem) => {
-    if (isAnime(item)) {
-      const type = normalizeMediaType(item);
-      router.push({ pathname: `/anime/${item.id}`, query: { type } });
-      return;
-    }
-
-    const type = normalizeMediaType(item);
-    router.push({ pathname: `/${type}/${item.id}` });
+  const openDetails = (item: MediaItem, play = false) => {
+    router.push(getDetailRoute(item, { play }));
   };
 
   const handleRefinedSearch = () => {
@@ -209,9 +186,26 @@ export default function Home() {
       ? `https://image.tmdb.org/t/p/w500${item.poster_path}`
       : "/no-image.svg";
 
+  const itemKey = (item: MediaItem) => `${getMediaType(item)}-${item.id}`;
+
+  const billboardItems: BillboardItem[] = featured.map((item) => ({
+    id: itemKey(item),
+    title: getTitle(item),
+    backdropUrl: `https://image.tmdb.org/t/p/original${item.backdrop_path}`,
+    overview: item.overview,
+    rating: item.vote_average,
+    year: getYear(item) === "N/A" ? undefined : getYear(item),
+    typeLabel: getMediaType(item) === "tv" ? "SERIES" : "MOVIE",
+  }));
+
+  const handleBillboardAction = (play: boolean) => (billboardItem: BillboardItem) => {
+    const match = featured.find((item) => itemKey(item) === billboardItem.id);
+    if (match) openDetails(match, play);
+  };
+
   const toRowItems = (items: MediaItem[]): MediaRowItem[] =>
     items.slice(0, 18).map((item) => ({
-      id: `${normalizeMediaType(item)}-${item.id}`,
+      id: itemKey(item),
       title: getTitle(item),
       posterUrl: getPoster(item),
       year: getYear(item) === "N/A" ? undefined : getYear(item),
@@ -219,11 +213,9 @@ export default function Home() {
     }));
 
   const handleRowClick = (items: MediaItem[]) => (row: MediaRowItem) => {
-    const match = items.find((item) => `${normalizeMediaType(item)}-${item.id}` === row.id);
-    if (match) handleCardClick(match);
+    const match = items.find((item) => itemKey(item) === row.id);
+    if (match) openDetails(match);
   };
-
-  const spotlight = featured.length ? featured[featuredIndex % featured.length] : null;
 
   return (
     <div className="home discover-home">
@@ -261,19 +253,19 @@ export default function Home() {
                 className={activeFilter === "movie" ? "discover-chip active" : "discover-chip"}
                 onClick={() => setActiveFilter("movie")}
               >
-                Movies ({searchResults.filter((item) => normalizeMediaType(item) === "movie").length})
+                Movies ({searchResults.filter((item) => getMediaType(item) === "movie").length})
               </button>
               <button
                 className={activeFilter === "tv" ? "discover-chip active" : "discover-chip"}
                 onClick={() => setActiveFilter("tv")}
               >
-                TV Shows ({searchResults.filter((item) => normalizeMediaType(item) === "tv").length})
+                TV Shows ({searchResults.filter((item) => getMediaType(item) === "tv").length})
               </button>
               <button
                 className={activeFilter === "anime" ? "discover-chip active" : "discover-chip"}
                 onClick={() => setActiveFilter("anime")}
               >
-                Anime ({searchResults.filter((item) => isAnime(item)).length})
+                Anime ({searchResults.filter((item) => isAnimeItem(item)).length})
               </button>
             </div>
 
@@ -290,13 +282,13 @@ export default function Home() {
             <div className="discover-grid">
               {filteredResults.map((item) => (
                 <article
-                  key={`${normalizeMediaType(item)}-${item.id}`}
+                  key={itemKey(item)}
                   className="discover-card"
-                  onClick={() => handleCardClick(item)}
+                  onClick={() => openDetails(item)}
                 >
                   <img src={getPoster(item)} alt={getTitle(item)} />
                   <div className="discover-card-content">
-                    <span className="discover-pill">{isAnime(item) ? "ANIME" : normalizeMediaType(item).toUpperCase()}</span>
+                    <span className="discover-pill">{isAnimeItem(item) ? "ANIME" : getMediaType(item).toUpperCase()}</span>
                     <h3>{getTitle(item)}</h3>
                     <p>{getYear(item)} • ⭐ {(item.vote_average || 0).toFixed(1)}</p>
                   </div>
@@ -307,57 +299,13 @@ export default function Home() {
         </main>
       ) : (
         <>
-          {spotlight ? (
-            <section className="billboard">
-              <div className="billboard-backdrop">
-                <img
-                  key={`${normalizeMediaType(spotlight)}-${spotlight.id}`}
-                  src={`https://image.tmdb.org/t/p/original${spotlight.backdrop_path}`}
-                  alt={getTitle(spotlight)}
-                />
-              </div>
-              <div className="billboard-vignette-bottom" />
-              <div className="billboard-vignette-left" />
-              <div className="billboard-content">
-                <p className="billboard-kicker">
-                  #{(featuredIndex % featured.length) + 1} Trending Today
-                </p>
-                <h1 className="billboard-title">{getTitle(spotlight)}</h1>
-                <div className="billboard-meta">
-                  <span className="meta-rating">
-                    <FaStar size={12} /> {(spotlight.vote_average || 0).toFixed(1)}
-                  </span>
-                  <span>{getYear(spotlight)}</span>
-                  <span className="meta-pill">
-                    {normalizeMediaType(spotlight) === "tv" ? "SERIES" : "MOVIE"}
-                  </span>
-                  <span className="meta-pill">HD</span>
-                </div>
-                <p className="billboard-overview">{spotlight.overview}</p>
-                <div className="billboard-actions">
-                  <button className="btn-play" onClick={() => handleCardClick(spotlight)}>
-                    <FaPlay /> Play
-                  </button>
-                  <button className="btn-more-info" onClick={() => handleCardClick(spotlight)}>
-                    <FaInfoCircle /> More Info
-                  </button>
-                </div>
-              </div>
-              <div className="billboard-dots">
-                {featured.map((item, index) => (
-                  <button
-                    key={`${normalizeMediaType(item)}-${item.id}`}
-                    className={
-                      index === featuredIndex % featured.length
-                        ? "billboard-dot active"
-                        : "billboard-dot"
-                    }
-                    onClick={() => setFeaturedIndex(index)}
-                    aria-label={`Show ${getTitle(item)}`}
-                  />
-                ))}
-              </div>
-            </section>
+          {billboardItems.length ? (
+            <Billboard
+              items={billboardItems}
+              getKicker={(_, index) => `#${index + 1} Trending Today`}
+              onPlay={handleBillboardAction(true)}
+              onInfo={handleBillboardAction(false)}
+            />
           ) : (
             <div className="billboard-loading">
               <div className="loading">Loading</div>

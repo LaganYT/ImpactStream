@@ -16,12 +16,12 @@ export type ContinueWatchingEntry = {
   updatedAt: string;
 };
 
-function buildDetailUrl(entry: ContinueWatchingEntry): string {
+function buildResumeUrl(entry: ContinueWatchingEntry): string {
   const { mediaType, tmdbId } = entry;
-  if (mediaType === "movie") return `/movie/${tmdbId}`;
-  if (mediaType === "tv") return `/tv/${tmdbId}`;
-  if (mediaType === "anime:movie") return `/anime/${tmdbId}?type=movie`;
-  if (mediaType === "anime:tv") return `/anime/${tmdbId}?type=tv`;
+  if (mediaType === "movie") return `/movie/${tmdbId}?play=1`;
+  if (mediaType === "tv") return `/tv/${tmdbId}?play=1`;
+  if (mediaType === "anime:movie") return `/anime/${tmdbId}?type=movie&play=1`;
+  if (mediaType === "anime:tv") return `/anime/${tmdbId}?type=tv&play=1`;
   return `/`;
 }
 
@@ -154,7 +154,7 @@ export default function ContinueWatchingRow({ maxItems = 12, showViewAll = true 
           const posterUrl = entry.posterPath
             ? `https://image.tmdb.org/t/p/w500${entry.posterPath}`
             : "/no-image.svg";
-          const url = buildDetailUrl(entry);
+          const url = buildResumeUrl(entry);
           const progressPct = Math.min(100, Math.max(0, entry.progress));
           const subtitle =
             entry.mediaType === "tv" || entry.mediaType === "anime:tv"

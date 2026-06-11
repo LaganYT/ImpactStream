@@ -2,12 +2,13 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import type { ContinueWatchingEntry } from "../components/ContinueWatchingRow";
 
-function buildDetailUrl(entry: ContinueWatchingEntry): string {
+function buildDetailUrl(entry: ContinueWatchingEntry, play = false): string {
   const { mediaType, tmdbId } = entry;
-  if (mediaType === "movie") return `/movie/${tmdbId}`;
-  if (mediaType === "tv") return `/tv/${tmdbId}`;
-  if (mediaType === "anime:movie") return `/anime/${tmdbId}?type=movie`;
-  if (mediaType === "anime:tv") return `/anime/${tmdbId}?type=tv`;
+  const playSuffix = play ? "play=1" : "";
+  if (mediaType === "movie") return `/movie/${tmdbId}${play ? `?${playSuffix}` : ""}`;
+  if (mediaType === "tv") return `/tv/${tmdbId}${play ? `?${playSuffix}` : ""}`;
+  if (mediaType === "anime:movie") return `/anime/${tmdbId}?type=movie${play ? `&${playSuffix}` : ""}`;
+  if (mediaType === "anime:tv") return `/anime/${tmdbId}?type=tv${play ? `&${playSuffix}` : ""}`;
   return `/`;
 }
 
@@ -143,12 +144,12 @@ export default function ContinueWatchingPage() {
 
   return (
     <div className="home discover-home">
-      <main className="container discover-shell">
+      <main className="page-shell">
         <section className="cw-page">
-          <div className="cw-page-header">
+          <div className="page-header">
             <div>
-              <h1 className="cw-page-title">Continue Watching</h1>
-              <p className="cw-page-subtitle">Pick up where you left off</p>
+              <h1 className="page-title">Continue Watching</h1>
+              <p className="page-subtitle">Pick up where you left off</p>
             </div>
             {entries.length > 0 && (
               <button className="cw-clear-btn" onClick={handleClearAll}>
@@ -214,7 +215,7 @@ export default function ContinueWatchingPage() {
                         className="cw-resume-btn"
                         onClick={(e) => {
                           e.stopPropagation();
-                          router.push(url);
+                          router.push(buildDetailUrl(entry, true));
                         }}
                       >
                         ▶ Resume

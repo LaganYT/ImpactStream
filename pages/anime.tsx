@@ -1,6 +1,8 @@
 import axios from "axios";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
+import MediaRow, { MediaRowItem } from "../components/MediaRow";
+import Billboard, { BillboardItem } from "../components/Billboard";
 
 type AnimeItem = {
   id: number;
@@ -78,9 +80,12 @@ export default function AnimePage() {
     fetchAnime();
   }, []);
 
-  const openAnime = (item: AnimeItem) => {
+  const openAnime = (item: AnimeItem, play = false) => {
     const type = item.media_type || "tv";
-    router.push({ pathname: `/anime/${item.id}`, query: { type } });
+    router.push({
+      pathname: `/anime/${item.id}`,
+      query: { type, ...(play ? { play: "1" } : {}) },
+    });
   };
 
   const getTitle = (item: AnimeItem) => item.name || item.title || "Untitled";
@@ -89,118 +94,78 @@ export default function AnimePage() {
       ? `https://image.tmdb.org/t/p/w500${item.poster_path}`
       : "/no-image.svg";
   const getYear = (item: AnimeItem) =>
-    item.first_air_date?.slice(0, 4) || item.release_date?.slice(0, 4) || "N/A";
+    item.first_air_date?.slice(0, 4) || item.release_date?.slice(0, 4) || undefined;
 
-  const getHero = featured[0] || topRated[0] || trending[0];
+  const billboardSource = useMemo(
+    () =>
+      [...featured, ...trending]
+        .filter((item) => item.backdrop_path && item.overview)
+        .slice(0, 6),
+    [featured, trending]
+  );
+
+  const billboardItems: BillboardItem[] = billboardSource.map((item) => ({
+    id: String(item.id),
+    title: getTitle(item),
+    backdropUrl: `https://image.tmdb.org/t/p/original${item.backdrop_path}`,
+    overview: item.overview,
+    rating: item.vote_average,
+    year: getYear(item),
+    typeLabel: "ANIME",
+  }));
+
+  const handleBillboardAction = (play: boolean) => (billboardItem: BillboardItem) => {
+    const match = billboardSource.find((item) => String(item.id) === billboardItem.id);
+    if (match) openAnime(match, play);
+  };
+
+  const toRowItems = (items: AnimeItem[]): MediaRowItem[] =>
+    items.slice(0, 18).map((item) => ({
+      id: item.id,
+      title: getTitle(item),
+      posterUrl: getPoster(item),
+      year: getYear(item),
+      rating: item.vote_average,
+    }));
+
+  const handleRowClick = (items: AnimeItem[]) => (row: MediaRowItem) => {
+    const match = items.find((item) => item.id === row.id);
+    if (match) openAnime(match);
+  };
 
   return (
     <div className="home discover-home">
-      <main className="container discover-shell">
-        <section className="discover-hero">
-          <div className="discover-hero-copy">
-            <p className="discover-kicker">Anime Hub</p>
-            <h1>Anime nights, organized like a premium streaming shelf.</h1>
-            <p>
-              Move between popular series, top-rated favorites, and this week's biggest titles
-              with the same watch-first layout used across the rest of ImpactStream.
-            </p>
-            <div className="discover-stat-row">
-              <div className="discover-stat-card">
-                <strong>{featured.length || 0}</strong>
-                <span>Popular Picks</span>
-              </div>
-              <div className="discover-stat-card">
-                <strong>{topRated.length || 0}</strong>
-                <span>Top Rated</span>
-              </div>
-              <div className="discover-stat-card">
-                <strong>{trending.length || 0}</strong>
-                <span>Trending Now</span>
-              </div>
-            </div>
-          </div>
+      {billboardItems.length ? (
+        <Billboard
+          items={billboardItems}
+          getKicker={() => "Featured Anime"}
+          onPlay={handleBillboardAction(true)}
+          onInfo={handleBillboardAction(false)}
+        />
+      ) : (
+        <div className="billboard-loading">
+          <div className="loading">{isLoading ? "Loading anime" : "Anime"}</div>
+        </div>
+      )}
 
-          {getHero ? (
-            <div className="discover-spotlight" onClick={() => openAnime(getHero)}>
-              <img
-                src={
-                  getHero.backdrop_path
-                    ? `https://image.tmdb.org/t/p/original${getHero.backdrop_path}`
-                    : getPoster(getHero)
-                }
-                alt={getTitle(getHero)}
-              />
-              <div className="discover-spotlight-overlay">
-                <span>Featured Anime</span>
-                <h3>{getTitle(getHero)}</h3>
-                <p>
-                  {getYear(getHero)} • ⭐ {(getHero.vote_average || 0).toFixed(1)}
-                </p>
-              </div>
-            </div>
-          ) : null}
-        </section>
-
-        {isLoading ? <div className="loading">Loading anime catalog</div> : null}
+      <main className="home-rows">
         {error ? <p className="discover-error">{error}</p> : null}
 
-        {!isLoading && !error ? (
-          <section className="categories">
-            <div className="category discover-category">
-              <h3>Popular Anime</h3>
-              <div className="category-scroll">
-                {featured.slice(0, 20).map((item) => (
-                  <div key={`popular-${item.id}`} className="category-item category-item-rich" onClick={() => openAnime(item)}>
-                    <img src={getPoster(item)} alt={getTitle(item)} />
-                    <div className="category-item-copy">
-                      <span className="discover-pill">Popular</span>
-                      <h4>{getTitle(item)}</h4>
-                      <p>
-                        {getYear(item)} • ⭐ {(item.vote_average || 0).toFixed(1)}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="category discover-category">
-              <h3>Top Rated Anime</h3>
-              <div className="category-scroll">
-                {topRated.slice(0, 20).map((item) => (
-                  <div key={`top-${item.id}`} className="category-item category-item-rich" onClick={() => openAnime(item)}>
-                    <img src={getPoster(item)} alt={getTitle(item)} />
-                    <div className="category-item-copy">
-                      <span className="discover-pill">Top Rated</span>
-                      <h4>{getTitle(item)}</h4>
-                      <p>
-                        {getYear(item)} • ⭐ {(item.vote_average || 0).toFixed(1)}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="category discover-category">
-              <h3>Trending This Week</h3>
-              <div className="category-scroll">
-                {trending.slice(0, 20).map((item) => (
-                  <div key={`trend-${item.id}`} className="category-item category-item-rich" onClick={() => openAnime(item)}>
-                    <img src={getPoster(item)} alt={getTitle(item)} />
-                    <div className="category-item-copy">
-                      <span className="discover-pill">Trending</span>
-                      <h4>{getTitle(item)}</h4>
-                      <p>
-                        {getYear(item)} • ⭐ {(item.vote_average || 0).toFixed(1)}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-        ) : null}
+        <MediaRow
+          title="Popular Anime"
+          items={toRowItems(featured)}
+          onItemClick={handleRowClick(featured)}
+        />
+        <MediaRow
+          title="Top Rated Anime"
+          items={toRowItems(topRated)}
+          onItemClick={handleRowClick(topRated)}
+        />
+        <MediaRow
+          title="Trending This Week"
+          items={toRowItems(trending)}
+          onItemClick={handleRowClick(trending)}
+        />
       </main>
     </div>
   );
