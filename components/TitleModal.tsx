@@ -80,8 +80,16 @@ function formatRuntime(minutes?: number): string | null {
   return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
 }
 
-function buildCinesrcDownloadUrl(mediaType: "movie" | "tv", tmdbId: number) {
-  return `https://cinesrc.st/download/${mediaType}/${tmdbId}`;
+function buildDownloadUrl(
+  mediaType: "movie" | "tv",
+  tmdbId: number,
+  season?: number,
+  episode?: number
+) {
+  if (mediaType === "tv") {
+    return `https://1embed.cc/download/tv/${tmdbId}/${season || 1}/${episode || 1}`;
+  }
+  return `https://1embed.cc/download/movie/${tmdbId}`;
 }
 
 function TitleModal({
@@ -225,8 +233,12 @@ function TitleModal({
     setIsTrailerMuted(!isTrailerMuted);
   };
 
-  const handleDownload = () => {
-    window.open(buildCinesrcDownloadUrl(titleRef.mediaType, titleRef.id), "_blank", "noreferrer");
+  const handleDownload = (episode?: number) => {
+    window.open(
+      buildDownloadUrl(titleRef.mediaType, titleRef.id, seasonNumber, episode),
+      "_blank",
+      "noreferrer"
+    );
   };
 
   const cast = (details?.credits?.cast || []).slice(0, 5).map((person) => person.name);
@@ -354,7 +366,7 @@ function TitleModal({
                     season={seasonNumber}
                     onSeasonChange={setSeasonNumber}
                     onEpisodeSelect={handleEpisodeSelect}
-                    onEpisodeDownload={handleDownload}
+                    onEpisodeDownload={(episode) => handleDownload(episode)}
                   />
                 ) : null}
 
