@@ -410,8 +410,8 @@ export async function fetchVideasyDownloadData(
     hasImdbId: Boolean(params.imdbId),
   });
 
-  const endpointFast = "https://api.videasy.net/downloader2/sources-with-title";
-  const endpointSlow = "https://api.videasy.net/e3b0c442/sources-with-title";
+  const endpointFast = "https://api.videasy.to/downloader2/sources-with-title";
+  const endpointSlow = "https://api.videasy.to/e3b0c442/sources-with-title";
 
   let decodedFast: DecodeResult | null = null;
   let fastError = "";

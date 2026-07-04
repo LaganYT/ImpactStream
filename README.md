@@ -5,9 +5,9 @@ A way to stream your favorite movies and TV shows with the VIDEASY player.
 ## Features
 
 - Search for movies, TV shows, and anime using The Movie Database (TMDB) API.
-- Stream content with [VIDEASY](https://player.videasy.net).
-- Movie URL format: `https://player.videasy.net/movie/{tmdbMovieId}`
-- TV URL format: `https://player.videasy.net/tv/{tmdbShowId}/{season}/{episode}`
+- Stream content with [VIDEASY](https://player.videasy.to).
+- Movie URL format: `https://player.videasy.to/movie/{tmdbMovieId}`
+- TV URL format: `https://player.videasy.to/tv/{tmdbShowId}/{season}/{episode}`
 - Responsive and user-friendly interface.
 - Customizable player options.
 
@@ -63,4 +63,4 @@ This project is licensed under the MIT License. See the LICENSE file for details
 ## Acknowledgments
 
 - [TMDB](https://www.themoviedb.org/) for providing movie and TV show data.
-- [VIDEASY](https://player.videasy.net) for embedded playback.
+- [VIDEASY](https://player.videasy.to) for embedded playback.
