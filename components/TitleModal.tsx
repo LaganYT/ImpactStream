@@ -12,13 +12,7 @@ import {
 } from "react";
 import { FaDownload, FaPlay, FaStar, FaTimes, FaVolumeMute, FaVolumeUp } from "react-icons/fa";
 import EpisodeList, { EpisodeInfo } from "./EpisodeList";
-import DownloadModal from "./DownloadModal";
 import { getMediaType, isAnimeItem, RoutableMediaItem } from "../utils/mediaRouting";
-import {
-  fetchVideasyDownloadData,
-  SourceItem,
-  SubtitleItem,
-} from "../utils/videasyDownloader";
 
 export type TitleRef = {
   id: number;
@@ -86,6 +80,10 @@ function formatRuntime(minutes?: number): string | null {
   return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
 }
 
+function buildCinesrcDownloadUrl(mediaType: "movie" | "tv", tmdbId: number) {
+  return `https://cinesrc.st/download/${mediaType}/${tmdbId}`;
+}
+
 function TitleModal({
   titleRef,
   onClose,
@@ -101,12 +99,6 @@ function TitleModal({
   const [seasonNumber, setSeasonNumber] = useState(1);
   const [episodes, setEpisodes] = useState<EpisodeInfo[]>([]);
   const [isTrailerMuted, setIsTrailerMuted] = useState(true);
-  const [downloadingKey, setDownloadingKey] = useState<string | null>(null);
-  const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
-  const [downloadSources, setDownloadSources] = useState<SourceItem[]>([]);
-  const [downloadSubtitles, setDownloadSubtitles] = useState<SubtitleItem[]>([]);
-  const [downloadError, setDownloadError] = useState("");
-  const [downloadTitle, setDownloadTitle] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -233,40 +225,8 @@ function TitleModal({
     setIsTrailerMuted(!isTrailerMuted);
   };
 
-  const handleDownload = async (episode?: number) => {
-    if (!details) return;
-    const key = episode ? `episode-${episode}` : "main";
-
-    try {
-      setDownloadingKey(key);
-      setDownloadError("");
-
-      const releaseYear = (details.release_date || details.first_air_date || "").slice(0, 4);
-      const decoded = await fetchVideasyDownloadData({
-        tmdbId: titleRef.id,
-        mediaType: titleRef.mediaType,
-        title,
-        year: releaseYear,
-        seasonId: titleRef.mediaType === "tv" ? seasonNumber : 1,
-        episodeId: titleRef.mediaType === "tv" ? episode || 1 : 1,
-        totalSeasons: Number(details.number_of_seasons || 0),
-        imdbId: details.external_ids?.imdb_id || details.imdb_id || "",
-      });
-
-      setDownloadSources(decoded.sources || []);
-      setDownloadSubtitles(decoded.subtitles || []);
-      setDownloadTitle(
-        titleRef.mediaType === "tv" && episode
-          ? `${title} | S${seasonNumber}E${episode}${releaseYear ? ` - [${releaseYear}]` : ""}`
-          : `${title}${releaseYear ? ` - [${releaseYear}]` : ""}`
-      );
-      setIsDownloadModalOpen(true);
-    } catch (error: any) {
-      setDownloadError(error?.message || "Unable to load download sources.");
-      setIsDownloadModalOpen(true);
-    } finally {
-      setDownloadingKey(null);
-    }
+  const handleDownload = () => {
+    window.open(buildCinesrcDownloadUrl(titleRef.mediaType, titleRef.id), "_blank", "noreferrer");
   };
 
   const cast = (details?.credits?.cast || []).slice(0, 5).map((person) => person.name);
@@ -329,10 +289,9 @@ function TitleModal({
                   <button
                     className="btn-more-info"
                     onClick={() => handleDownload()}
-                    disabled={downloadingKey !== null}
                   >
                     <FaDownload />
-                    {downloadingKey === "main" ? " Decoding..." : " Download"}
+                    Download
                   </button>
                 ) : null}
               </div>
@@ -395,12 +354,7 @@ function TitleModal({
                     season={seasonNumber}
                     onSeasonChange={setSeasonNumber}
                     onEpisodeSelect={handleEpisodeSelect}
-                    onEpisodeDownload={(episode) => handleDownload(episode)}
-                    downloadingEpisode={
-                      downloadingKey?.startsWith("episode-")
-                        ? Number(downloadingKey.replace("episode-", ""))
-                        : undefined
-                    }
+                    onEpisodeDownload={handleDownload}
                   />
                 ) : null}
 
@@ -446,15 +400,6 @@ function TitleModal({
         </div>
       </div>
 
-      <DownloadModal
-        isOpen={isDownloadModalOpen}
-        title={downloadTitle}
-        error={downloadError}
-        sources={downloadSources}
-        subtitles={downloadSubtitles}
-        fallbackName={title}
-        onClose={() => setIsDownloadModalOpen(false)}
-      />
     </>
   );
 }
