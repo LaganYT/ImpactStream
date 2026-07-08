@@ -9,17 +9,21 @@ interface Channel {
   iptv_urls: string[];
   youtube_urls: string[];
   language: string;
+  languages?: string[];
   country: string;
   isGeoBlocked: boolean;
 }
+
+const DEFAULT_LANGUAGE = "eng";
+const DEFAULT_COUNTRY = "US";
 
 export default function LiveTV() {
   const router = useRouter();
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedLanguage, setSelectedLanguage] = useState("");
-  const [selectedCountry, setSelectedCountry] = useState("");
+  const [selectedLanguage, setSelectedLanguage] = useState(DEFAULT_LANGUAGE);
+  const [selectedCountry, setSelectedCountry] = useState(DEFAULT_COUNTRY);
   const [currentPage, setCurrentPage] = useState(1);
   const channelsPerPage = 50;
 
@@ -40,7 +44,8 @@ export default function LiveTV() {
 
   const filteredChannels = channels.filter(channel => {
     const matchesSearch = channel.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesLanguage = !selectedLanguage || channel.language === selectedLanguage;
+    const channelLanguages = channel.languages?.length ? channel.languages : [channel.language];
+    const matchesLanguage = !selectedLanguage || channelLanguages.includes(selectedLanguage);
     const matchesCountry = !selectedCountry || channel.country === selectedCountry;
     return matchesSearch && matchesLanguage && matchesCountry;
   });
@@ -56,7 +61,13 @@ export default function LiveTV() {
   const endIndex = startIndex + channelsPerPage;
   const currentChannels = filteredChannels.slice(startIndex, endIndex);
 
-  const languages = Array.from(new Set(channels.map(ch => ch.language).filter(lang => !!lang))).sort();
+  const languages = Array.from(
+    new Set(
+      channels
+        .flatMap(ch => ch.languages?.length ? ch.languages : [ch.language])
+        .filter(lang => !!lang)
+    )
+  ).sort();
   const countries = Array.from(new Set(channels.map(ch => ch.country).filter(country => !!country))).sort();
   const hasActiveFilters = Boolean(searchQuery || selectedLanguage || selectedCountry);
 
