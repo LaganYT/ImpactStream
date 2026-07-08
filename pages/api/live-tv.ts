@@ -29,6 +29,7 @@ type LiveTvChannel = {
 
 const IPTV_ORG_DATA_BASE = 'https://raw.githubusercontent.com/iptv-org/database/master/data';
 const IPTV_ORG_STREAMS_URL = 'https://iptv-org.github.io/api/streams.json';
+const EXTERNAL_PROXY_HOSTS = new Set(['cors-proxy.cooks.fyi']);
 
 const parseCsv = (csv: string): CsvRow[] => {
   const rows: string[][] = [];
@@ -105,6 +106,33 @@ const splitList = (value: string | undefined) =>
 
 const toCountryCode = (country: string) => country.trim().toUpperCase();
 
+const getLocalProxyUrl = (url: string) => `/api/stream-proxy?url=${encodeURIComponent(url)}`;
+
+const unwrapExternalProxyUrl = (url: string) => {
+  try {
+    const parsedUrl = new URL(url);
+    const path = `${parsedUrl.pathname.slice(1)}${parsedUrl.search}`;
+
+    if (EXTERNAL_PROXY_HOSTS.has(parsedUrl.hostname) && /^https?:\/\//i.test(path)) {
+      return decodeURIComponent(path);
+    }
+  } catch {
+    return url;
+  }
+
+  return url;
+};
+
+const normalizeStreamUrl = (url: string) => {
+  const unwrappedUrl = unwrapExternalProxyUrl(url);
+
+  if (unwrappedUrl !== url) {
+    return getLocalProxyUrl(unwrappedUrl);
+  }
+
+  return url;
+};
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -168,7 +196,7 @@ export default async function handler(
       }
 
       const languages = feedLanguagesByChannel.get(channelId) || [];
-      const streamUrls = Array.from(new Set(channelStreams.map((stream) => stream.url)));
+      const streamUrls = Array.from(new Set(channelStreams.map((stream) => normalizeStreamUrl(stream.url))));
       const country = toCountryCode(channel.country);
 
       channels.push({

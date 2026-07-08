@@ -9,8 +9,24 @@ const PRIVATE_IPV4_RANGES = [
   /^192\.168\./,
   /^0\./,
 ];
+const EXTERNAL_PROXY_HOSTS = new Set(['cors-proxy.cooks.fyi']);
 
 const getProxyUrl = (url: string) => `/api/stream-proxy?url=${encodeURIComponent(url)}`;
+
+const unwrapExternalProxyUrl = (url: string) => {
+  try {
+    const parsedUrl = new URL(url);
+    const path = `${parsedUrl.pathname.slice(1)}${parsedUrl.search}`;
+
+    if (EXTERNAL_PROXY_HOSTS.has(parsedUrl.hostname) && /^https?:\/\//i.test(path)) {
+      return decodeURIComponent(path);
+    }
+  } catch {
+    return url;
+  }
+
+  return url;
+};
 
 const isBlockedHostname = (hostname: string) => {
   const normalizedHostname = hostname.toLowerCase();
@@ -66,7 +82,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   let parsedUrl: URL;
 
   try {
-    parsedUrl = new URL(targetUrl);
+    parsedUrl = new URL(unwrapExternalProxyUrl(targetUrl));
   } catch {
     return res.status(400).json({ message: 'Invalid stream URL' });
   }
