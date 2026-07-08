@@ -200,7 +200,7 @@ export default function TVDetailsPage() {
     const storageKey = `continue:tv:${storageId}`;
 
     const handleProgressMessage = (event: MessageEvent) => {
-      if (event.origin !== "https://1embed.cc") return;
+      if (event.origin !== "https://player.videasy.to") return;
 
       const payload =
         typeof event.data === "string"
@@ -315,7 +315,7 @@ export default function TVDetailsPage() {
     <MediaDetailShell
       title={tvShow.name || "Untitled"}
       // Old player URL: https://player.videasy.to/tv/${tvId}/${seasonNumber}/${episodeNumber}?${tvQuery.toString()}
-      embedUrl={`https://1embed.cc/embed/tv/${tvId}/${seasonNumber}/${episodeNumber}?${tvQuery.toString()}`}
+      embedUrl={`https://player.videasy.to/tv/${tvId}/${seasonNumber}/${episodeNumber}?${tvQuery.toString()}`}
     />
   );
 }

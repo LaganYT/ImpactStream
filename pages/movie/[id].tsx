@@ -46,7 +46,7 @@ export default function MovieDetailsPage() {
     const storageKey = `continue:movie:${storageId}`;
 
     const handleProgressMessage = (event: MessageEvent) => {
-      if (event.origin !== "https://1embed.cc") return;
+      if (event.origin !== "https://player.videasy.to") return;
 
       const payload =
         typeof event.data === "string"
@@ -151,7 +151,7 @@ export default function MovieDetailsPage() {
     <MediaDetailShell
       title={movie.title || "Untitled"}
       // Old player URL: https://player.videasy.to/movie/${movieId}?${movieQuery.toString()}
-      embedUrl={`https://1embed.cc/embed/movie/${movieId}?${movieQuery.toString()}`}
+      embedUrl={`https://player.videasy.to/movie/${movieId}?${movieQuery.toString()}`}
     />
   );
 }

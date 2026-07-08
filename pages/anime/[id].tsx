@@ -214,7 +214,7 @@ export default function AnimeDetailsPage() {
     const storageKey = `continue:anime:${animeType}:${storageId}`;
 
     const handleProgressMessage = (event: MessageEvent) => {
-      if (event.origin !== "https://1embed.cc") return;
+      if (event.origin !== "https://player.videasy.to") return;
 
       const payload =
         typeof event.data === "string"
@@ -327,7 +327,7 @@ export default function AnimeDetailsPage() {
         query.set("progress", String(resumeSeconds));
       }
       // Old player URL: https://player.videasy.to/movie/${mediaId}?${query.toString()}
-      return `https://1embed.cc/embed/movie/${mediaId}?${query.toString()}`;
+      return `https://player.videasy.to/movie/${mediaId}?${query.toString()}`;
     }
 
     const query = new URLSearchParams({
@@ -341,7 +341,7 @@ export default function AnimeDetailsPage() {
       query.set("progress", String(resumeSeconds));
     }
     // Old player URL: https://player.videasy.to/tv/${mediaId}/${seasonNumber}/${episodeNumber}?${query.toString()}
-    return `https://1embed.cc/embed/tv/${mediaId}/${seasonNumber}/${episodeNumber}?${query.toString()}`;
+    return `https://player.videasy.to/tv/${mediaId}/${seasonNumber}/${episodeNumber}?${query.toString()}`;
   }, [id, animeType, seasonNumber, episodeNumber, resumeSeconds]);
 
   const isReady =
