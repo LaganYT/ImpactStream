@@ -21,6 +21,7 @@ type LiveTvChannel = {
   language: string;
   languages: string[];
   country: string;
+  category?: string;
   isGeoBlocked: boolean;
   stream_urls: string[];
   logo?: string;
@@ -28,6 +29,8 @@ type LiveTvChannel = {
 
 const IPTV_ORG_DATA_BASE = 'https://raw.githubusercontent.com/iptv-org/database/master/data';
 const IPTV_ORG_STREAMS_URL = 'https://iptv-org.github.io/api/streams.json';
+const SPORTS_EVENTS_PLAYLIST_URL =
+  'https://raw.githubusercontent.com/doms9/iptv/refs/heads/default/M3U8/events.m3u8';
 
 const parseCsv = (csv: string): CsvRow[] => {
   const rows: string[][] = [];
@@ -104,6 +107,64 @@ const splitList = (value: string | undefined) =>
 
 const toCountryCode = (country: string) => country.trim().toUpperCase();
 
+const parseM3uAttributes = (line: string) => {
+  const attributes: Record<string, string> = {};
+  const attributePattern = /([\w-]+)="([^"]*)"/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = attributePattern.exec(line)) !== null) {
+    attributes[match[1]] = match[2];
+  }
+
+  return attributes;
+};
+
+const parseM3uPlaylist = (playlist: string): LiveTvChannel[] => {
+  const lines = playlist
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const channels: LiveTvChannel[] = [];
+  let currentInfo: { attributes: Record<string, string>; fallbackName: string } | null = null;
+
+  lines.forEach((line) => {
+    if (line.startsWith('#EXTINF:')) {
+      const attributes = parseM3uAttributes(line);
+      const fallbackName = line.includes(',') ? line.slice(line.lastIndexOf(',') + 1).trim() : '';
+      currentInfo = { attributes, fallbackName };
+      return;
+    }
+
+    if (line.startsWith('#') || !currentInfo) {
+      return;
+    }
+
+    const { attributes, fallbackName } = currentInfo;
+    const streamUrl = line;
+    const channelNumber = attributes['tvg-chno'] || String(channels.length + 1);
+    const name = attributes['tvg-name'] || fallbackName || `Sports Event ${channelNumber}`;
+
+    channels.push({
+      nanoid: `sports:${channelNumber}`,
+      name,
+      iptv_urls: [streamUrl],
+      youtube_urls: [],
+      language: 'eng',
+      languages: ['eng'],
+      country: 'US',
+      category: 'Sports',
+      isGeoBlocked: false,
+      stream_urls: [streamUrl],
+      logo: attributes['tvg-logo'],
+    });
+
+    currentInfo = null;
+  });
+
+  return channels;
+};
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -113,10 +174,11 @@ export default async function handler(
   }
 
   try {
-    const [channelsCsv, feedsCsv, logosCsv, streamsResponse] = await Promise.all([
+    const [channelsCsv, feedsCsv, logosCsv, sportsEventsPlaylist, streamsResponse] = await Promise.all([
       fetchText(`${IPTV_ORG_DATA_BASE}/channels.csv`),
       fetchText(`${IPTV_ORG_DATA_BASE}/feeds.csv`),
       fetchText(`${IPTV_ORG_DATA_BASE}/logos.csv`),
+      fetchText(SPORTS_EVENTS_PLAYLIST_URL),
       fetch(IPTV_ORG_STREAMS_URL),
     ]);
 
@@ -159,6 +221,7 @@ export default async function handler(
       streamsByChannel.set(stream.channel, channelStreams);
     });
 
+    const sportsEventChannels = parseM3uPlaylist(sportsEventsPlaylist);
     const validChannels = channelRows.reduce<LiveTvChannel[]>((channels, channel) => {
       const channelId = channel.id;
       const channelStreams = streamsByChannel.get(channelId) || [];
@@ -178,6 +241,7 @@ export default async function handler(
         language: languages[0] || '',
         languages,
         country,
+        category: 'Live TV',
         isGeoBlocked: channelStreams.some((stream) =>
           (stream.label || '').toLowerCase().includes('geo-blocked')
         ),
@@ -191,7 +255,7 @@ export default async function handler(
     res
       .setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400')
       .status(200)
-      .json(validChannels);
+      .json([...sportsEventChannels, ...validChannels]);
   } catch (error) {
     console.error('Error fetching live TV channels:', error);
     res.status(500).json({ message: 'Failed to fetch channels' });

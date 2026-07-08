@@ -11,6 +11,7 @@ interface Channel {
   language: string;
   languages?: string[];
   country: string;
+  category?: string;
   isGeoBlocked: boolean;
 }
 
@@ -24,6 +25,7 @@ export default function LiveTV() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedLanguage, setSelectedLanguage] = useState(DEFAULT_LANGUAGE);
   const [selectedCountry, setSelectedCountry] = useState(DEFAULT_COUNTRY);
+  const [selectedCategory, setSelectedCategory] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const channelsPerPage = 50;
 
@@ -47,13 +49,14 @@ export default function LiveTV() {
     const channelLanguages = channel.languages?.length ? channel.languages : [channel.language];
     const matchesLanguage = !selectedLanguage || channelLanguages.includes(selectedLanguage);
     const matchesCountry = !selectedCountry || channel.country === selectedCountry;
-    return matchesSearch && matchesLanguage && matchesCountry;
+    const matchesCategory = !selectedCategory || channel.category === selectedCategory;
+    return matchesSearch && matchesLanguage && matchesCountry && matchesCategory;
   });
 
   // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, selectedLanguage, selectedCountry]);
+  }, [searchQuery, selectedLanguage, selectedCountry, selectedCategory]);
 
   // Calculate pagination
   const totalPages = Math.ceil(filteredChannels.length / channelsPerPage);
@@ -69,7 +72,8 @@ export default function LiveTV() {
     )
   ).sort();
   const countries = Array.from(new Set(channels.map(ch => ch.country).filter(country => !!country))).sort();
-  const hasActiveFilters = Boolean(searchQuery || selectedLanguage || selectedCountry);
+  const categories = Array.from(new Set(channels.map(ch => ch.category).filter(category => !!category))).sort();
+  const hasActiveFilters = Boolean(searchQuery || selectedLanguage || selectedCountry || selectedCategory);
 
   const handleChannelClick = (channel: Channel) => {
     router.push(`/live-tv/${channel.nanoid}`);
@@ -78,6 +82,7 @@ export default function LiveTV() {
   const clearFilters = () => {
     setSelectedLanguage("");
     setSelectedCountry("");
+    setSelectedCategory("");
     setSearchQuery("");
   };
 
@@ -184,6 +189,18 @@ export default function LiveTV() {
           ))}
         </select>
 
+        <select
+          className="toolbar-select"
+          value={selectedCategory}
+          onChange={(e) => setSelectedCategory(e.target.value)}
+          aria-label="Filter by category"
+        >
+          <option value="">All Categories</option>
+          {categories.map(category => (
+            <option key={category} value={category}>{category}</option>
+          ))}
+        </select>
+
         {hasActiveFilters ? (
           <button className="toolbar-clear" onClick={clearFilters}>
             Clear
@@ -212,6 +229,7 @@ export default function LiveTV() {
                 <h3>{channel.name}</h3>
                 <p>
                   {[channel.language, channel.country]
+                    .concat(channel.category ? [channel.category] : [])
                     .filter(Boolean)
                     .map((value) => value.toUpperCase())
                     .join(" • ") || "Live channel"}
