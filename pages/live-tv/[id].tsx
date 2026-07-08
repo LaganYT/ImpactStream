@@ -14,6 +14,14 @@ interface Channel {
   isGeoBlocked: boolean;
 }
 
+const getPlayableStreamUrl = (url: string) => {
+  if (typeof window !== "undefined" && window.location.protocol === "https:" && url.startsWith("http://")) {
+    return `/api/stream-proxy?url=${encodeURIComponent(url)}`;
+  }
+
+  return url;
+};
+
 export default function TVPlayer() {
   const router = useRouter();
   const { id } = router.query;
@@ -39,7 +47,7 @@ export default function TVPlayer() {
         setChannel(foundChannel);
         // Prefer IPTV URL over YouTube URL
         if (foundChannel.iptv_urls.length > 0) {
-          setStreamUrl(foundChannel.iptv_urls[0]);
+          setStreamUrl(getPlayableStreamUrl(foundChannel.iptv_urls[0]));
         } else if (foundChannel.youtube_urls.length > 0) {
           setStreamUrl(foundChannel.youtube_urls[0]);
         }
