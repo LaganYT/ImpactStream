@@ -30,6 +30,12 @@ type LiveTvChannel = {
 const IPTV_ORG_DATA_BASE = 'https://raw.githubusercontent.com/iptv-org/database/master/data';
 const IPTV_ORG_STREAMS_URL = 'https://iptv-org.github.io/api/streams.json';
 const EXTERNAL_PROXY_HOSTS = new Set(['cors-proxy.cooks.fyi']);
+const CHANNEL_STREAM_OVERRIDES: Record<string, { preferred: string[]; blocked: string[] }> = {
+  'DisneyChannel.us': {
+    preferred: ['http://206.212.244.63/650/index.m3u8'],
+    blocked: ['http://212.5.144.156:8080/disney/index.m3u8'],
+  },
+};
 
 const parseCsv = (csv: string): CsvRow[] => {
   const rows: string[][] = [];
@@ -133,6 +139,16 @@ const normalizeStreamUrl = (url: string) => {
   return url;
 };
 
+const getStreamUrls = (channelId: string, channelStreams: IptvStream[]) => {
+  const override = CHANNEL_STREAM_OVERRIDES[channelId];
+  const blockedUrls = new Set((override?.blocked || []).map(unwrapExternalProxyUrl));
+  const upstreamUrls = channelStreams
+    .map((stream) => unwrapExternalProxyUrl(stream.url))
+    .filter((url) => !blockedUrls.has(url));
+
+  return Array.from(new Set([...(override?.preferred || []), ...upstreamUrls].map(normalizeStreamUrl)));
+};
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -196,7 +212,7 @@ export default async function handler(
       }
 
       const languages = feedLanguagesByChannel.get(channelId) || [];
-      const streamUrls = Array.from(new Set(channelStreams.map((stream) => normalizeStreamUrl(stream.url))));
+      const streamUrls = getStreamUrls(channelId, channelStreams);
       const country = toCountryCode(channel.country);
 
       channels.push({
