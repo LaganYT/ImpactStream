@@ -14,6 +14,28 @@ interface Channel {
   isGeoBlocked: boolean;
 }
 
+type GuideProgram = {
+  title: string;
+  description: string;
+  start: string;
+  stop: string;
+  category: string;
+};
+
+type GuideSource = {
+  feed: string | null;
+  site: string;
+  siteId: string;
+  siteName: string;
+  language: string;
+  hasSource: boolean;
+};
+
+type ChannelGuide = {
+  guides: GuideSource[];
+  programs: GuideProgram[];
+};
+
 const getPlayableStreamUrl = (url: string) => {
   if (typeof window !== "undefined" && window.location.protocol === "https:" && url.startsWith("http://")) {
     return `/api/stream-proxy?url=${encodeURIComponent(url)}`;
@@ -29,12 +51,33 @@ export default function TVPlayer() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [streamUrl, setStreamUrl] = useState("");
+  const [guide, setGuide] = useState<ChannelGuide | null>(null);
+  const [guideLoading, setGuideLoading] = useState(false);
 
   useEffect(() => {
     if (id) {
       fetchChannel();
     }
   }, [id]);
+
+  useEffect(() => {
+    if (!channel?.nanoid) return;
+
+    const fetchGuide = async () => {
+      try {
+        setGuideLoading(true);
+        const response = await axios.get(`/api/live-tv-guide?channel=${encodeURIComponent(channel.nanoid)}`);
+        setGuide(response.data);
+      } catch (err) {
+        console.error('Error fetching guide:', err);
+        setGuide(null);
+      } finally {
+        setGuideLoading(false);
+      }
+    };
+
+    fetchGuide();
+  }, [channel?.nanoid]);
 
   const fetchChannel = async () => {
     try {
@@ -64,6 +107,29 @@ export default function TVPlayer() {
 
   const handleBack = () => {
     router.push('/live-tv');
+  };
+
+  const formatGuideTime = (value: string) => {
+    if (!value) return "";
+
+    return new Intl.DateTimeFormat(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+      timeZoneName: "short",
+    }).format(new Date(value));
+  };
+
+  const getProgramDurationMinutes = (program: GuideProgram) => {
+    const startTime = new Date(program.start).getTime();
+    const stopTime = new Date(program.stop).getTime();
+    const duration = (stopTime - startTime) / 60000;
+
+    return Number.isFinite(duration) && duration > 0 ? duration : 30;
+  };
+
+  const getProgramGridWidth = (program: GuideProgram) => {
+    const duration = getProgramDurationMinutes(program);
+    return Math.max(180, Math.min(520, duration * 4));
   };
 
   if (loading) {
@@ -154,6 +220,35 @@ export default function TVPlayer() {
             <strong>Geo-blocked:</strong> {channel.isGeoBlocked ? "Yes" : "No"}
           </div>
         </div>
+      </div>
+
+      <div className="channel-details">
+        <h2>Channel Guide</h2>
+        {guideLoading ? (
+          <div className="loading">Loading guide...</div>
+        ) : guide?.programs.length ? (
+          <div className="guide-timeline" aria-label={`${channel.name} schedule`}>
+            {guide.programs.map((program, index) => (
+              <div
+                className="guide-slot"
+                key={`${program.start}-${program.title}-${index}`}
+                style={{ minWidth: `${getProgramGridWidth(program)}px` }}
+              >
+                <div className="guide-slot-time">
+                  {formatGuideTime(program.start)}
+                  {program.stop ? ` - ${formatGuideTime(program.stop)}` : ""}
+                </div>
+                <div className="guide-slot-title">{program.title}</div>
+                {program.category ? <div className="guide-slot-meta">{program.category}</div> : null}
+                {program.description ? <p>{program.description}</p> : null}
+              </div>
+            ))}
+          </div>
+        ) : guide?.guides.length ? (
+          <p>No programme schedule is available for this channel right now.</p>
+        ) : (
+          <p>No guide data is available for this channel.</p>
+        )}
       </div>
     </div>
   );
