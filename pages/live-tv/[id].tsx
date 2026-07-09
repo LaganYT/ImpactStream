@@ -129,7 +129,7 @@ export default function TVPlayer() {
 
   const getProgramGridWidth = (program: GuideProgram) => {
     const duration = getProgramDurationMinutes(program);
-    return Math.max(180, Math.min(520, duration * 4));
+    return Math.max(150, Math.min(260, duration * 2.2));
   };
 
   if (loading) {

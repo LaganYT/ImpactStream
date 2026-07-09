@@ -1891,6 +1891,73 @@ button:active {
   color: var(--accent-soft);
 }
 
+.guide-timeline {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding: 0.25rem 0 0.8rem;
+  scroll-snap-type: x proximity;
+}
+
+.guide-timeline::-webkit-scrollbar {
+  height: 8px;
+}
+
+.guide-timeline::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+}
+
+.guide-slot {
+  scroll-snap-align: start;
+  flex: 0 0 auto;
+  min-height: 112px;
+  padding: 0.65rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+}
+
+.guide-slot-time {
+  color: var(--accent-soft);
+  font-size: 0.72rem;
+  font-weight: 800;
+  margin-bottom: 0.4rem;
+  white-space: nowrap;
+}
+
+.guide-slot-title {
+  color: #fff;
+  display: -webkit-box;
+  font-size: 0.88rem;
+  font-weight: 800;
+  line-height: 1.25;
+  margin-bottom: 0.3rem;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.guide-slot-meta {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin-bottom: 0.45rem;
+  text-transform: uppercase;
+}
+
+.guide-slot p {
+  color: rgba(255, 255, 255, 0.68);
+  display: -webkit-box;
+  font-size: 0.76rem;
+  line-height: 1.3;
+  margin: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .error {
   display: flex;
   flex-direction: column;
