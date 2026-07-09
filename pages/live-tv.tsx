@@ -13,6 +13,8 @@ interface Channel {
   country: string;
   category?: string;
   isGeoBlocked: boolean;
+  hasGuide?: boolean;
+  guideCount?: number;
 }
 
 const DEFAULT_LANGUAGE = "eng";
@@ -248,6 +250,11 @@ export default function LiveTV() {
                 <span className="source-badge youtube">
                   <FaYoutube />
                   YouTube ({channel.youtube_urls.length})
+                </span>
+              )}
+              {channel.hasGuide && (
+                <span className="source-badge">
+                  Guide ({channel.guideCount || 1})
                 </span>
               )}
             </div>
