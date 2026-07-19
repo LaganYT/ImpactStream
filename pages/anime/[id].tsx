@@ -1,7 +1,16 @@
 import { useRouter } from "next/router";
+import type { GetServerSideProps } from "next";
 import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
 import MediaDetailShell from "../../components/MediaDetailShell";
+import {
+  buildVidnestAnimeUrl,
+  getVidnestMediaEntry,
+  logVidnestPlayerEvent,
+  parseVidnestMessageData,
+  toContinueProgress,
+  VIDNEST_ORIGIN,
+} from "../../utils/vidnest";
 
 type AnimeType = "movie" | "tv";
 
@@ -19,6 +28,12 @@ type AnimeDetails = {
   number_of_seasons?: number;
   number_of_episodes?: number;
   genres?: { id: number; name: string }[];
+};
+
+export const getServerSideProps: GetServerSideProps = async () => ({ props: {} });
+
+type AniListSearchResult = {
+  id: number;
 };
 
 function shouldTrackContinueWatching(input: {
@@ -47,6 +62,7 @@ export default function AnimeDetailsPage() {
   const [episodesCount, setEpisodesCount] = useState(0);
   const [resumeSeconds, setResumeSeconds] = useState(0);
   const [isProgressLoaded, setIsProgressLoaded] = useState(false);
+  const [anilistId, setAnilistId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -62,6 +78,46 @@ export default function AnimeDetailsPage() {
 
     fetchDetails();
   }, [id, animeType]);
+
+  useEffect(() => {
+    if (!anime) return;
+
+    const title = anime.title || anime.name;
+    if (!title) return;
+
+    const fetchAniListId = async () => {
+      const year = Number(
+        (anime.release_date || anime.first_air_date || "").slice(0, 4)
+      );
+      const query = `
+        query ($search: String, $format: MediaFormat, $year: Int) {
+          Page(page: 1, perPage: 1) {
+            media(search: $search, type: ANIME, format: $format, seasonYear: $year) {
+              id
+            }
+          }
+        }
+      `;
+
+      try {
+        const format = animeType === "movie" ? "MOVIE" : "TV";
+        const { data } = await axios.post("https://graphql.anilist.co", {
+          query,
+          variables: {
+            search: title,
+            format,
+            year: Number.isFinite(year) && year > 0 ? year : undefined,
+          },
+        });
+        const result = data?.data?.Page?.media?.[0] as AniListSearchResult | undefined;
+        setAnilistId(result?.id ? String(result.id) : null);
+      } catch {
+        setAnilistId(null);
+      }
+    };
+
+    fetchAniListId();
+  }, [anime, animeType]);
 
   useEffect(() => {
     if (!id || !anime) return;
@@ -214,44 +270,34 @@ export default function AnimeDetailsPage() {
     const storageKey = `continue:anime:${animeType}:${storageId}`;
 
     const handleProgressMessage = (event: MessageEvent) => {
-      if (event.origin !== "https://player.videasy.to") return;
+      if (event.origin !== VIDNEST_ORIGIN) return;
 
-      const payload =
-        typeof event.data === "string"
-          ? (() => {
-              try {
-                return JSON.parse(event.data);
-              } catch {
-                return null;
-              }
-            })()
-          : event.data;
+      const payload = parseVidnestMessageData(event.data) as { type?: string; data?: unknown } | null;
+      if (payload?.type === "PLAYER_EVENT") {
+        logVidnestPlayerEvent(payload.data);
+        return;
+      }
+      if (!payload || payload.type !== "MEDIA_DATA" || !anilistId) return;
 
-      if (!payload || payload.type !== animeType) return;
-      if (String(payload.id) !== storageId) return;
+      window.localStorage.setItem("vidNestProgress", JSON.stringify(payload.data));
 
-      const payloadSeason = Number(payload.season);
-      const payloadEpisode = Number(payload.episode);
-      if (animeType === "tv" && payloadSeason > 0 && payloadEpisode > 0) {
-        if (payloadSeason !== seasonNumber) {
-          setSeasonNumber(payloadSeason);
-        }
-        if (payloadEpisode !== episodeNumber) {
-          setEpisodeNumber(payloadEpisode);
+      const mediaEntry = getVidnestMediaEntry(payload.data, anilistId);
+      if (!mediaEntry) return;
+
+      const nextProgress = toContinueProgress(mediaEntry, 1, episodeNumber);
+      const nextEpisode = nextProgress.episodeNumber || episodeNumber;
+      if (animeType === "tv" && nextEpisode > 0) {
+        if (nextEpisode !== episodeNumber) {
+          setEpisodeNumber(nextEpisode);
         }
       }
 
-      const timestamp = Math.max(0, Math.floor(Number(payload.timestamp || 0)));
-      const duration = Math.max(0, Math.floor(Number(payload.duration || 0)));
-      const progress = Math.max(0, Math.min(100, Number(payload.progress || 0)));
-      const nextSeason = animeType === "tv" && payloadSeason > 0 ? payloadSeason : 1;
-      const nextEpisode = animeType === "tv" && payloadEpisode > 0 ? payloadEpisode : 1;
       const nextData = {
-        seasonNumber: nextSeason,
-        episodeNumber: nextEpisode,
-        timestamp,
-        duration,
-        progress,
+        seasonNumber: 1,
+        episodeNumber: animeType === "tv" ? nextEpisode : 1,
+        timestamp: nextProgress.timestamp,
+        duration: nextProgress.duration,
+        progress: nextProgress.progress,
         updatedAt: new Date().toISOString(),
         title: anime?.title || anime?.name || undefined,
         posterPath: anime?.poster_path || undefined,
@@ -277,7 +323,7 @@ export default function AnimeDetailsPage() {
 
     window.addEventListener("message", handleProgressMessage);
     return () => window.removeEventListener("message", handleProgressMessage);
-  }, [id, animeType, isProgressLoaded, seasonNumber, episodeNumber, anime]);
+  }, [id, animeType, isProgressLoaded, episodeNumber, anime, anilistId]);
 
   useEffect(() => {
     if (!id || !isProgressLoaded) return;
@@ -313,39 +359,17 @@ export default function AnimeDetailsPage() {
   }, [id, animeType, isProgressLoaded, seasonNumber, episodeNumber]);
 
   const streamUrl = useMemo(() => {
-    if (!id) return "";
-    const mediaId = Array.isArray(id) ? id[0] : id;
+    if (!anilistId) return "";
 
     if (animeType === "movie") {
-      const query = new URLSearchParams({
-        color: "e50914",
-        autoplay: "true",
-        nextEpisode: "true",
-        overlay: "true",
-      });
-      if (resumeSeconds > 0) {
-        query.set("progress", String(resumeSeconds));
-      }
-      // Old player URL: https://player.videasy.to/movie/${mediaId}?${query.toString()}
-      return `https://player.videasy.to/movie/${mediaId}?${query.toString()}`;
+      return buildVidnestAnimeUrl(anilistId, 1, resumeSeconds);
     }
 
-    const query = new URLSearchParams({
-      color: "e50914",
-      autoplay: "true",
-      nextEpisode: "true",
-      autoplayNextEpisode: "true",
-      overlay: "true",
-    });
-    if (resumeSeconds > 0) {
-      query.set("progress", String(resumeSeconds));
-    }
-    // Old player URL: https://player.videasy.to/tv/${mediaId}/${seasonNumber}/${episodeNumber}?${query.toString()}
-    return `https://player.videasy.to/tv/${mediaId}/${seasonNumber}/${episodeNumber}?${query.toString()}`;
-  }, [id, animeType, seasonNumber, episodeNumber, resumeSeconds]);
+    return buildVidnestAnimeUrl(anilistId, episodeNumber, resumeSeconds);
+  }, [anilistId, animeType, episodeNumber, resumeSeconds]);
 
   const isReady =
-    Boolean(anime) &&
+    Boolean(anime) && Boolean(streamUrl) &&
     (animeType === "movie" || (episodesCount > 0 && seasonNumber > 0 && episodeNumber > 0));
 
   if (!isReady) return <div className="loading">Loading...</div>;

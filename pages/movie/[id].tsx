@@ -1,7 +1,16 @@
 import { useRouter } from "next/router";
+import type { GetServerSideProps } from "next";
 import axios from "axios";
 import { useEffect, useState } from "react";
 import MediaDetailShell from "../../components/MediaDetailShell";
+import {
+  buildVidnestMovieUrl,
+  getVidnestMediaEntry,
+  logVidnestPlayerEvent,
+  parseVidnestMessageData,
+  toContinueProgress,
+  VIDNEST_ORIGIN,
+} from "../../utils/vidnest";
 
 type MovieDetails = {
   title?: string;
@@ -14,6 +23,8 @@ type MovieDetails = {
   genres?: { id: number; name: string }[];
   imdb_id?: string;
 };
+
+export const getServerSideProps: GetServerSideProps = async () => ({ props: {} });
 
 export default function MovieDetailsPage() {
   const router = useRouter();
@@ -46,25 +57,21 @@ export default function MovieDetailsPage() {
     const storageKey = `continue:movie:${storageId}`;
 
     const handleProgressMessage = (event: MessageEvent) => {
-      if (event.origin !== "https://player.videasy.to") return;
+      if (event.origin !== VIDNEST_ORIGIN) return;
 
-      const payload =
-        typeof event.data === "string"
-          ? (() => {
-              try {
-                return JSON.parse(event.data);
-              } catch {
-                return null;
-              }
-            })()
-          : event.data;
+      const payload = parseVidnestMessageData(event.data) as { type?: string; data?: unknown } | null;
+      if (payload?.type === "PLAYER_EVENT") {
+        logVidnestPlayerEvent(payload.data);
+        return;
+      }
+      if (!payload || payload.type !== "MEDIA_DATA") return;
 
-      if (!payload || payload.type !== "movie") return;
-      if (String(payload.id) !== storageId) return;
+      window.localStorage.setItem("vidNestProgress", JSON.stringify(payload.data));
 
-      const timestamp = Math.max(0, Math.floor(Number(payload.timestamp || 0)));
-      const duration = Math.max(0, Math.floor(Number(payload.duration || 0)));
-      const progress = Math.max(0, Math.min(100, Number(payload.progress || 0)));
+      const mediaEntry = getVidnestMediaEntry(payload.data, storageId);
+      if (!mediaEntry || mediaEntry.type !== "movie") return;
+
+      const { timestamp, duration, progress } = toContinueProgress(mediaEntry);
 
       window.localStorage.setItem(
         storageKey,
@@ -136,22 +143,12 @@ export default function MovieDetailsPage() {
   if (!movie) return <div className="loading">Loading...</div>;
 
   const movieId = Array.isArray(id) ? id[0] : id;
-  const movieQuery = new URLSearchParams({
-    color: "e50914",
-    autoplay: "true",
-    nextEpisode: "true",
-    episodeSelector: "true",
-    overlay: "true",
-  });
-  if (resumeSeconds > 0) {
-    movieQuery.set("progress", String(resumeSeconds));
-  }
+  if (!movieId) return <div className="loading">Loading...</div>;
 
   return (
     <MediaDetailShell
       title={movie.title || "Untitled"}
-      // Old player URL: https://player.videasy.to/movie/${movieId}?${movieQuery.toString()}
-      embedUrl={`https://player.videasy.to/movie/${movieId}?${movieQuery.toString()}`}
+      embedUrl={buildVidnestMovieUrl(movieId, resumeSeconds)}
     />
   );
 }

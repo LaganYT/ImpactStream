@@ -1,7 +1,16 @@
 import { useRouter } from "next/router";
+import type { GetServerSideProps } from "next";
 import axios from "axios";
 import { useEffect, useState } from "react";
 import MediaDetailShell from "../../components/MediaDetailShell";
+import {
+  buildVidnestTvUrl,
+  getVidnestMediaEntry,
+  logVidnestPlayerEvent,
+  parseVidnestMessageData,
+  toContinueProgress,
+  VIDNEST_ORIGIN,
+} from "../../utils/vidnest";
 
 type TVDetails = {
   name?: string;
@@ -14,6 +23,8 @@ type TVDetails = {
   number_of_episodes?: number;
   genres?: { id: number; name: string }[];
 };
+
+export const getServerSideProps: GetServerSideProps = async () => ({ props: {} });
 
 function shouldTrackContinueWatching(input: {
   seasonNumber?: number;
@@ -200,44 +211,38 @@ export default function TVDetailsPage() {
     const storageKey = `continue:tv:${storageId}`;
 
     const handleProgressMessage = (event: MessageEvent) => {
-      if (event.origin !== "https://player.videasy.to") return;
+      if (event.origin !== VIDNEST_ORIGIN) return;
 
-      const payload =
-        typeof event.data === "string"
-          ? (() => {
-              try {
-                return JSON.parse(event.data);
-              } catch {
-                return null;
-              }
-            })()
-          : event.data;
+      const payload = parseVidnestMessageData(event.data) as { type?: string; data?: unknown } | null;
+      if (payload?.type === "PLAYER_EVENT") {
+        logVidnestPlayerEvent(payload.data);
+        return;
+      }
+      if (!payload || payload.type !== "MEDIA_DATA") return;
 
-      if (!payload || payload.type !== "tv") return;
-      if (String(payload.id) !== storageId) return;
+      window.localStorage.setItem("vidNestProgress", JSON.stringify(payload.data));
 
-      const payloadSeason = Number(payload.season);
-      const payloadEpisode = Number(payload.episode);
-      if (payloadSeason > 0 && payloadEpisode > 0) {
-        if (payloadSeason !== seasonNumber) {
-          setSeasonNumber(payloadSeason);
+      const mediaEntry = getVidnestMediaEntry(payload.data, storageId);
+      if (!mediaEntry || mediaEntry.type !== "tv") return;
+
+      const nextProgress = toContinueProgress(mediaEntry, seasonNumber, episodeNumber);
+      const nextSeason = nextProgress.seasonNumber || seasonNumber;
+      const nextEpisode = nextProgress.episodeNumber || episodeNumber;
+      if (nextSeason > 0 && nextEpisode > 0) {
+        if (nextSeason !== seasonNumber) {
+          setSeasonNumber(nextSeason);
         }
-        if (payloadEpisode !== episodeNumber) {
-          setEpisodeNumber(payloadEpisode);
+        if (nextEpisode !== episodeNumber) {
+          setEpisodeNumber(nextEpisode);
         }
       }
 
-      const timestamp = Math.max(0, Math.floor(Number(payload.timestamp || 0)));
-      const duration = Math.max(0, Math.floor(Number(payload.duration || 0)));
-      const progress = Math.max(0, Math.min(100, Number(payload.progress || 0)));
-      const nextSeason = payloadSeason > 0 ? payloadSeason : seasonNumber;
-      const nextEpisode = payloadEpisode > 0 ? payloadEpisode : episodeNumber;
       const nextData = {
         seasonNumber: nextSeason,
         episodeNumber: nextEpisode,
-        timestamp,
-        duration,
-        progress,
+        timestamp: nextProgress.timestamp,
+        duration: nextProgress.duration,
+        progress: nextProgress.progress,
         updatedAt: new Date().toISOString(),
         title: tvShow?.name || undefined,
         posterPath: tvShow?.poster_path || undefined,
@@ -300,22 +305,12 @@ export default function TVDetailsPage() {
   }
 
   const tvId = Array.isArray(id) ? id[0] : id;
-  const tvQuery = new URLSearchParams({
-    color: "e50914",
-    autoplay: "true",
-    nextEpisode: "true",
-    autoplayNextEpisode: "true",
-    overlay: "true",
-  });
-  if (resumeSeconds > 0) {
-    tvQuery.set("progress", String(resumeSeconds));
-  }
+  if (!tvId) return <div className="loading">Loading...</div>;
 
   return (
     <MediaDetailShell
       title={tvShow.name || "Untitled"}
-      // Old player URL: https://player.videasy.to/tv/${tvId}/${seasonNumber}/${episodeNumber}?${tvQuery.toString()}
-      embedUrl={`https://player.videasy.to/tv/${tvId}/${seasonNumber}/${episodeNumber}?${tvQuery.toString()}`}
+      embedUrl={buildVidnestTvUrl(tvId, seasonNumber, episodeNumber, resumeSeconds)}
     />
   );
 }
