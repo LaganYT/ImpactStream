@@ -40,12 +40,6 @@ export function buildVidnestTvUrl(tmdbId: string, season: number, episode: numbe
   return `${VIDNEST_ORIGIN}/tv/${tmdbId}/${season}/${episode}${withQuery(query)}`;
 }
 
-export function buildVidnestAnimeUrl(anilistId: string, episode: number, resumeSeconds = 0, audio = "sub") {
-  const query = new URLSearchParams();
-  if (resumeSeconds > 0) query.set("progress", String(resumeSeconds));
-  return `${VIDNEST_ORIGIN}/anime/${anilistId}/${episode}/${audio}${withQuery(query)}`;
-}
-
 export function parseVidnestMessageData(data: unknown) {
   if (typeof data === "string") {
     try {

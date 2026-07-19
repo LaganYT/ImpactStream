@@ -4,7 +4,8 @@ import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
 import MediaDetailShell from "../../components/MediaDetailShell";
 import {
-  buildVidnestAnimeUrl,
+  buildVidnestMovieUrl,
+  buildVidnestTvUrl,
   getVidnestMediaEntry,
   logVidnestPlayerEvent,
   parseVidnestMessageData,
@@ -32,10 +33,6 @@ type AnimeDetails = {
 
 export const getServerSideProps: GetServerSideProps = async () => ({ props: {} });
 
-type AniListSearchResult = {
-  id: number;
-};
-
 function shouldTrackContinueWatching(input: {
   seasonNumber?: number;
   episodeNumber?: number;
@@ -62,7 +59,6 @@ export default function AnimeDetailsPage() {
   const [episodesCount, setEpisodesCount] = useState(0);
   const [resumeSeconds, setResumeSeconds] = useState(0);
   const [isProgressLoaded, setIsProgressLoaded] = useState(false);
-  const [anilistId, setAnilistId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -78,46 +74,6 @@ export default function AnimeDetailsPage() {
 
     fetchDetails();
   }, [id, animeType]);
-
-  useEffect(() => {
-    if (!anime) return;
-
-    const title = anime.title || anime.name;
-    if (!title) return;
-
-    const fetchAniListId = async () => {
-      const year = Number(
-        (anime.release_date || anime.first_air_date || "").slice(0, 4)
-      );
-      const query = `
-        query ($search: String, $format: MediaFormat, $year: Int) {
-          Page(page: 1, perPage: 1) {
-            media(search: $search, type: ANIME, format: $format, seasonYear: $year) {
-              id
-            }
-          }
-        }
-      `;
-
-      try {
-        const format = animeType === "movie" ? "MOVIE" : "TV";
-        const { data } = await axios.post("https://graphql.anilist.co", {
-          query,
-          variables: {
-            search: title,
-            format,
-            year: Number.isFinite(year) && year > 0 ? year : undefined,
-          },
-        });
-        const result = data?.data?.Page?.media?.[0] as AniListSearchResult | undefined;
-        setAnilistId(result?.id ? String(result.id) : null);
-      } catch {
-        setAnilistId(null);
-      }
-    };
-
-    fetchAniListId();
-  }, [anime, animeType]);
 
   useEffect(() => {
     if (!id || !anime) return;
@@ -277,23 +233,27 @@ export default function AnimeDetailsPage() {
         logVidnestPlayerEvent(payload.data);
         return;
       }
-      if (!payload || payload.type !== "MEDIA_DATA" || !anilistId) return;
+      if (!payload || payload.type !== "MEDIA_DATA") return;
 
       window.localStorage.setItem("vidNestProgress", JSON.stringify(payload.data));
 
-      const mediaEntry = getVidnestMediaEntry(payload.data, anilistId);
-      if (!mediaEntry) return;
+      const mediaEntry = getVidnestMediaEntry(payload.data, storageId);
+      if (!mediaEntry || mediaEntry.type !== animeType) return;
 
-      const nextProgress = toContinueProgress(mediaEntry, 1, episodeNumber);
+      const nextProgress = toContinueProgress(mediaEntry, seasonNumber, episodeNumber);
+      const nextSeason = animeType === "tv" ? nextProgress.seasonNumber || seasonNumber : 1;
       const nextEpisode = nextProgress.episodeNumber || episodeNumber;
-      if (animeType === "tv" && nextEpisode > 0) {
+      if (animeType === "tv" && nextSeason > 0 && nextEpisode > 0) {
+        if (nextSeason !== seasonNumber) {
+          setSeasonNumber(nextSeason);
+        }
         if (nextEpisode !== episodeNumber) {
           setEpisodeNumber(nextEpisode);
         }
       }
 
       const nextData = {
-        seasonNumber: 1,
+        seasonNumber: animeType === "tv" ? nextSeason : 1,
         episodeNumber: animeType === "tv" ? nextEpisode : 1,
         timestamp: nextProgress.timestamp,
         duration: nextProgress.duration,
@@ -323,7 +283,7 @@ export default function AnimeDetailsPage() {
 
     window.addEventListener("message", handleProgressMessage);
     return () => window.removeEventListener("message", handleProgressMessage);
-  }, [id, animeType, isProgressLoaded, episodeNumber, anime, anilistId]);
+  }, [id, animeType, isProgressLoaded, seasonNumber, episodeNumber, anime]);
 
   useEffect(() => {
     if (!id || !isProgressLoaded) return;
@@ -359,14 +319,16 @@ export default function AnimeDetailsPage() {
   }, [id, animeType, isProgressLoaded, seasonNumber, episodeNumber]);
 
   const streamUrl = useMemo(() => {
-    if (!anilistId) return "";
+    if (!id) return "";
+    const mediaId = Array.isArray(id) ? id[0] : id;
+    if (!mediaId) return "";
 
     if (animeType === "movie") {
-      return buildVidnestAnimeUrl(anilistId, 1, resumeSeconds);
+      return buildVidnestMovieUrl(mediaId, resumeSeconds);
     }
 
-    return buildVidnestAnimeUrl(anilistId, episodeNumber, resumeSeconds);
-  }, [anilistId, animeType, episodeNumber, resumeSeconds]);
+    return buildVidnestTvUrl(mediaId, seasonNumber, episodeNumber, resumeSeconds);
+  }, [id, animeType, seasonNumber, episodeNumber, resumeSeconds]);
 
   const isReady =
     Boolean(anime) && Boolean(streamUrl) &&
