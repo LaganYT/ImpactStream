@@ -3,11 +3,11 @@ import type { NextApiRequest, NextApiResponse } from "next";
 type MediaType = "movie" | "tv" | "anime";
 
 const MOVIE_PROVIDERS: string[] = [
-  "https://vidfast.pro/movie/",
+  "https://vidfast.vc/movie/",
 ];
 
 const TV_PROVIDERS: string[] = [
-  "https://vidfast.pro/tv/",
+  "https://vidfast.vc/tv/",
 ];
 
 function selectProviders(type: MediaType): string[] {
@@ -72,5 +72,4 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
 
   return res.status(200).json({ url: primary });
 }
-
 

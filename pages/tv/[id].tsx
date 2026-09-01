@@ -4,13 +4,13 @@ import axios from "axios";
 import { useEffect, useState } from "react";
 import MediaDetailShell from "../../components/MediaDetailShell";
 import {
-  buildVidnestTvUrl,
-  getVidnestMediaEntry,
-  logVidnestPlayerEvent,
-  parseVidnestMessageData,
+  buildVidfastTvUrl,
+  getVidfastMediaEntry,
+  logVidfastPlayerEvent,
+  parseVidfastMessageData,
   toContinueProgress,
-  VIDNEST_ORIGIN,
-} from "../../utils/vidnest";
+  VIDFAST_ORIGIN,
+} from "../../utils/vidfast";
 
 type TVDetails = {
   name?: string;
@@ -211,18 +211,18 @@ export default function TVDetailsPage() {
     const storageKey = `continue:tv:${storageId}`;
 
     const handleProgressMessage = (event: MessageEvent) => {
-      if (event.origin !== VIDNEST_ORIGIN) return;
+      if (event.origin !== VIDFAST_ORIGIN) return;
 
-      const payload = parseVidnestMessageData(event.data) as { type?: string; data?: unknown } | null;
+      const payload = parseVidfastMessageData(event.data) as { type?: string; data?: unknown } | null;
       if (payload?.type === "PLAYER_EVENT") {
-        logVidnestPlayerEvent(payload.data);
+        logVidfastPlayerEvent(payload.data);
         return;
       }
       if (!payload || payload.type !== "MEDIA_DATA") return;
 
-      window.localStorage.setItem("vidNestProgress", JSON.stringify(payload.data));
+      window.localStorage.setItem("vidFastProgress", JSON.stringify(payload.data));
 
-      const mediaEntry = getVidnestMediaEntry(payload.data, storageId);
+      const mediaEntry = getVidfastMediaEntry(payload.data, storageId);
       if (!mediaEntry || mediaEntry.type !== "tv") return;
 
       const nextProgress = toContinueProgress(mediaEntry, seasonNumber, episodeNumber);
@@ -310,7 +310,7 @@ export default function TVDetailsPage() {
   return (
     <MediaDetailShell
       title={tvShow.name || "Untitled"}
-      embedUrl={buildVidnestTvUrl(tvId, seasonNumber, episodeNumber, resumeSeconds)}
+      embedUrl={buildVidfastTvUrl(tvId, seasonNumber, episodeNumber, resumeSeconds)}
     />
   );
 }

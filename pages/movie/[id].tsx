@@ -4,13 +4,13 @@ import axios from "axios";
 import { useEffect, useState } from "react";
 import MediaDetailShell from "../../components/MediaDetailShell";
 import {
-  buildVidnestMovieUrl,
-  getVidnestMediaEntry,
-  logVidnestPlayerEvent,
-  parseVidnestMessageData,
+  buildVidfastMovieUrl,
+  getVidfastMediaEntry,
+  logVidfastPlayerEvent,
+  parseVidfastMessageData,
   toContinueProgress,
-  VIDNEST_ORIGIN,
-} from "../../utils/vidnest";
+  VIDFAST_ORIGIN,
+} from "../../utils/vidfast";
 
 type MovieDetails = {
   title?: string;
@@ -57,18 +57,18 @@ export default function MovieDetailsPage() {
     const storageKey = `continue:movie:${storageId}`;
 
     const handleProgressMessage = (event: MessageEvent) => {
-      if (event.origin !== VIDNEST_ORIGIN) return;
+      if (event.origin !== VIDFAST_ORIGIN) return;
 
-      const payload = parseVidnestMessageData(event.data) as { type?: string; data?: unknown } | null;
+      const payload = parseVidfastMessageData(event.data) as { type?: string; data?: unknown } | null;
       if (payload?.type === "PLAYER_EVENT") {
-        logVidnestPlayerEvent(payload.data);
+        logVidfastPlayerEvent(payload.data);
         return;
       }
       if (!payload || payload.type !== "MEDIA_DATA") return;
 
-      window.localStorage.setItem("vidNestProgress", JSON.stringify(payload.data));
+      window.localStorage.setItem("vidFastProgress", JSON.stringify(payload.data));
 
-      const mediaEntry = getVidnestMediaEntry(payload.data, storageId);
+      const mediaEntry = getVidfastMediaEntry(payload.data, storageId);
       if (!mediaEntry || mediaEntry.type !== "movie") return;
 
       const { timestamp, duration, progress } = toContinueProgress(mediaEntry);
@@ -148,7 +148,7 @@ export default function MovieDetailsPage() {
   return (
     <MediaDetailShell
       title={movie.title || "Untitled"}
-      embedUrl={buildVidnestMovieUrl(movieId, resumeSeconds)}
+      embedUrl={buildVidfastMovieUrl(movieId, resumeSeconds)}
     />
   );
 }

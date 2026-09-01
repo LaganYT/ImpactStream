@@ -1,22 +1,22 @@
-export const VIDNEST_ORIGIN = "https://vidnest.fun";
+export const VIDFAST_ORIGIN = "https://vidfast.vc";
 
 type MediaKind = "movie" | "tv";
 
-type VidnestProgress = {
+type VidfastProgress = {
   watched?: number;
   duration?: number;
 };
 
-type VidnestMediaEntry = {
+type VidfastMediaEntry = {
   id?: number | string;
   type?: MediaKind | "anime";
-  progress?: VidnestProgress;
+  progress?: VidfastProgress;
   last_season_watched?: number | string;
   last_episode_watched?: number | string;
   show_progress?: Record<string, {
     season?: number | string;
     episode?: number | string;
-    progress?: VidnestProgress;
+    progress?: VidfastProgress;
   }>;
 };
 
@@ -28,19 +28,23 @@ export type ContinueProgressPayload = {
   episodeNumber?: number;
 };
 
-export function buildVidnestMovieUrl(tmdbId: string, resumeSeconds = 0) {
+export function buildVidfastMovieUrl(tmdbId: string, resumeSeconds = 0) {
   const query = new URLSearchParams();
-  if (resumeSeconds > 0) query.set("progress", String(resumeSeconds));
-  return `${VIDNEST_ORIGIN}/movie/${tmdbId}${withQuery(query)}`;
+  query.set("autoPlay", "true");
+  if (resumeSeconds > 0) query.set("startAt", String(resumeSeconds));
+  return `${VIDFAST_ORIGIN}/movie/${tmdbId}${withQuery(query)}`;
 }
 
-export function buildVidnestTvUrl(tmdbId: string, season: number, episode: number, resumeSeconds = 0) {
+export function buildVidfastTvUrl(tmdbId: string, season: number, episode: number, resumeSeconds = 0) {
   const query = new URLSearchParams();
-  if (resumeSeconds > 0) query.set("progress", String(resumeSeconds));
-  return `${VIDNEST_ORIGIN}/tv/${tmdbId}/${season}/${episode}${withQuery(query)}`;
+  query.set("autoPlay", "true");
+  query.set("nextButton", "true");
+  query.set("autoNext", "true");
+  if (resumeSeconds > 0) query.set("startAt", String(resumeSeconds));
+  return `${VIDFAST_ORIGIN}/tv/${tmdbId}/${season}/${episode}${withQuery(query)}`;
 }
 
-export function parseVidnestMessageData(data: unknown) {
+export function parseVidfastMessageData(data: unknown) {
   if (typeof data === "string") {
     try {
       return JSON.parse(data);
@@ -52,7 +56,7 @@ export function parseVidnestMessageData(data: unknown) {
   return data && typeof data === "object" ? data : null;
 }
 
-export function logVidnestPlayerEvent(data: unknown) {
+export function logVidfastPlayerEvent(data: unknown) {
   if (!data || typeof data !== "object") return;
 
   const playerData = data as { event?: string; currentTime?: number; duration?: number };
@@ -65,21 +69,21 @@ export function logVidnestPlayerEvent(data: unknown) {
   );
 }
 
-export function getVidnestMediaEntry(
+export function getVidfastMediaEntry(
   mediaData: unknown,
   mediaId: string | number
-): VidnestMediaEntry | null {
+): VidfastMediaEntry | null {
   if (!mediaData || typeof mediaData !== "object") return null;
 
-  const byId = (mediaData as Record<string, VidnestMediaEntry>)[String(mediaId)];
+  const byId = (mediaData as Record<string, VidfastMediaEntry>)[String(mediaId)];
   if (byId) return byId;
 
-  const values = Object.values(mediaData as Record<string, VidnestMediaEntry>);
+  const values = Object.values(mediaData as Record<string, VidfastMediaEntry>);
   return values.find((entry) => String(entry?.id) === String(mediaId)) || null;
 }
 
 export function toContinueProgress(
-  entry: VidnestMediaEntry,
+  entry: VidfastMediaEntry,
   fallbackSeason = 1,
   fallbackEpisode = 1
 ): ContinueProgressPayload {

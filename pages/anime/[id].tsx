@@ -4,14 +4,14 @@ import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
 import MediaDetailShell from "../../components/MediaDetailShell";
 import {
-  buildVidnestMovieUrl,
-  buildVidnestTvUrl,
-  getVidnestMediaEntry,
-  logVidnestPlayerEvent,
-  parseVidnestMessageData,
+  buildVidfastMovieUrl,
+  buildVidfastTvUrl,
+  getVidfastMediaEntry,
+  logVidfastPlayerEvent,
+  parseVidfastMessageData,
   toContinueProgress,
-  VIDNEST_ORIGIN,
-} from "../../utils/vidnest";
+  VIDFAST_ORIGIN,
+} from "../../utils/vidfast";
 
 type AnimeType = "movie" | "tv";
 
@@ -226,18 +226,18 @@ export default function AnimeDetailsPage() {
     const storageKey = `continue:anime:${animeType}:${storageId}`;
 
     const handleProgressMessage = (event: MessageEvent) => {
-      if (event.origin !== VIDNEST_ORIGIN) return;
+      if (event.origin !== VIDFAST_ORIGIN) return;
 
-      const payload = parseVidnestMessageData(event.data) as { type?: string; data?: unknown } | null;
+      const payload = parseVidfastMessageData(event.data) as { type?: string; data?: unknown } | null;
       if (payload?.type === "PLAYER_EVENT") {
-        logVidnestPlayerEvent(payload.data);
+        logVidfastPlayerEvent(payload.data);
         return;
       }
       if (!payload || payload.type !== "MEDIA_DATA") return;
 
-      window.localStorage.setItem("vidNestProgress", JSON.stringify(payload.data));
+      window.localStorage.setItem("vidFastProgress", JSON.stringify(payload.data));
 
-      const mediaEntry = getVidnestMediaEntry(payload.data, storageId);
+      const mediaEntry = getVidfastMediaEntry(payload.data, storageId);
       if (!mediaEntry || mediaEntry.type !== animeType) return;
 
       const nextProgress = toContinueProgress(mediaEntry, seasonNumber, episodeNumber);
@@ -324,10 +324,10 @@ export default function AnimeDetailsPage() {
     if (!mediaId) return "";
 
     if (animeType === "movie") {
-      return buildVidnestMovieUrl(mediaId, resumeSeconds);
+      return buildVidfastMovieUrl(mediaId, resumeSeconds);
     }
 
-    return buildVidnestTvUrl(mediaId, seasonNumber, episodeNumber, resumeSeconds);
+    return buildVidfastTvUrl(mediaId, seasonNumber, episodeNumber, resumeSeconds);
   }, [id, animeType, seasonNumber, episodeNumber, resumeSeconds]);
 
   const isReady =
