@@ -110,6 +110,26 @@ function downloadName(input: VidsrcDownloadRequest): string {
   return `${input.title}${suffix}`.replace(/[\\/:*?"<>|]/g, "").trim() || "video";
 }
 
+function isMobileDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const mobileUserAgent = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  const iPadDesktopMode = /Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1;
+  return mobileUserAgent || iPadDesktopMode;
+}
+
+function startMobileStreamDownload(streamUrl: string, input: VidsrcDownloadRequest) {
+  const downloadUrl = new URL("/api/download-hls", window.location.origin);
+  downloadUrl.searchParams.set("url", streamUrl);
+  downloadUrl.searchParams.set("filename", downloadName(input));
+
+  const link = document.createElement("a");
+  link.href = downloadUrl.toString();
+  link.rel = "noopener";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
 export async function extractVidsrcStream(input: VidsrcDownloadRequest, signal?: AbortSignal) {
   const url = new URL(`${getApiBase()}/extract`);
   url.searchParams.set("tmdb_id", String(input.tmdbId));
@@ -136,8 +156,21 @@ export async function downloadVidsrcMp4(input: VidsrcDownloadRequest, options: D
   try {
     report({ stage: "extracting", message: "Finding the video stream", progress: 0.02 });
     const streamUrl = await extractVidsrcStream(input, options.signal);
-    report({ stage: "loading", message: "Loading the MP4 converter", progress: 0.08 });
 
+    // ffmpeg.wasm stores the HLS parts, its virtual filesystem, the converted output,
+    // and the final browser Blob in memory at the same time. That is fine on desktop,
+    // but large videos can exceed Safari/Chrome mobile tab memory limits. On mobile,
+    // hand the stream to a server endpoint that forwards each HLS part directly to the
+    // browser instead, keeping phone memory nearly constant throughout the download.
+    if (isMobileDevice()) {
+      if (options.signal?.aborted) throw new DOMException("Download canceled", "AbortError");
+      report({ stage: "downloading", message: "Starting low-memory mobile download", progress: 0.9 });
+      startMobileStreamDownload(streamUrl, input);
+      report({ stage: "saving", message: "Download started", progress: 1 });
+      return;
+    }
+
+    report({ stage: "loading", message: "Loading the MP4 converter", progress: 0.08 });
     const dynamicImport = Function("url", "return import(url)") as (url: string) => Promise<any>;
     const [{ FFmpeg }, { toBlobURL }] = await Promise.all([
       dynamicImport(FFMPEG_PACKAGE_URL),
