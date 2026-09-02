@@ -240,45 +240,67 @@ function saveMp4Blob(parts: BlobPart[], input: VidsrcDownloadRequest) {
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
 }
 
-async function transmuxTsSegment(transmuxer: MuxTransmuxer, bytes: Uint8Array) {
-  return new Promise<MuxSegment[]>((resolve, reject) => {
-    const output: MuxSegment[] = [];
-    let settled = false;
+function hasTransportStreamSync(bytes: Uint8Array) {
+  if (bytes.byteLength < 188) return false;
+  const maxOffset = Math.min(187, bytes.byteLength - 1);
+  for (let offset = 0; offset <= maxOffset; offset += 1) {
+    if (bytes[offset] !== 0x47) continue;
+    if (offset + 188 >= bytes.byteLength || bytes[offset + 188] === 0x47) return true;
+  }
+  return false;
+}
 
-    const cleanup = () => {
-      transmuxer.off?.("data", onData);
-      transmuxer.off?.("done", onDone);
-    };
-    const onData = (segment?: MuxSegment) => {
-      if (segment) output.push(segment);
-    };
-    const onDone = () => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      resolve(output);
-    };
+async function transmuxTsSegment(muxjs: MuxJs, bytes: Uint8Array) {
+  if (!hasTransportStreamSync(bytes)) {
+    throw new Error("The video part was not valid MPEG-TS data.");
+  }
 
-    transmuxer.on("data", onData);
-    transmuxer.on("done", onDone);
-
-    try {
-      transmuxer.push(bytes);
-      transmuxer.flush();
-      window.setTimeout(() => {
-        if (!settled && output.length > 0) onDone();
-        else if (!settled) {
-          settled = true;
-          cleanup();
-          reject(new Error("The mobile MP4 converter produced no output."));
-        }
-      }, 0);
-    } catch (error) {
-      settled = true;
-      cleanup();
-      reject(error);
-    }
+  const transmuxer = new muxjs.mp4.Transmuxer({
+    keepOriginalTimestamps: true,
+    remux: true,
   });
+
+  try {
+    return await new Promise<MuxSegment[]>((resolve, reject) => {
+      const output: MuxSegment[] = [];
+      let settled = false;
+      let fallbackTimer: number | null = null;
+
+      const cleanup = () => {
+        if (fallbackTimer != null) window.clearTimeout(fallbackTimer);
+        transmuxer.off?.("data", onData);
+        transmuxer.off?.("done", onDone);
+      };
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        if (output.length > 0) resolve(output);
+        else reject(new Error("The mobile MP4 converter produced no output."));
+      };
+      const onData = (segment?: MuxSegment) => {
+        if (segment) output.push(segment);
+      };
+      const onDone = () => finish();
+
+      transmuxer.on("data", onData);
+      transmuxer.on("done", onDone);
+
+      try {
+        transmuxer.push(bytes);
+        transmuxer.flush();
+        // Give busy mobile browsers time to deliver mux.js events instead of treating
+        // a 0 ms scheduling delay as a failed conversion.
+        fallbackTimer = window.setTimeout(finish, 250);
+      } catch (error) {
+        settled = true;
+        cleanup();
+        reject(error);
+      }
+    });
+  } finally {
+    transmuxer.dispose?.();
+  }
 }
 
 async function downloadMobileMp4(
@@ -317,35 +339,42 @@ async function downloadMobileMp4(
     }
   } else {
     const muxjs = await loadMuxJs(options.signal);
-    const transmuxer = new muxjs.mp4.Transmuxer({
-      keepOriginalTimestamps: true,
-      remux: true,
-    });
     let wroteInitSegment = false;
 
-    try {
-      for (let index = 0; index < parts.length; index += 1) {
-        if (options.signal?.aborted) throw new DOMException("Download canceled", "AbortError");
-        report({
-          stage: "downloading",
-          message: `Downloading and converting video part ${index + 1} of ${parts.length}`,
-          progress: 0.1 + ((index + 1) / parts.length) * 0.82,
-        });
+    for (let index = 0; index < parts.length; index += 1) {
+      if (options.signal?.aborted) throw new DOMException("Download canceled", "AbortError");
+      report({
+        stage: "downloading",
+        message: `Downloading and converting video part ${index + 1} of ${parts.length}`,
+        progress: 0.1 + ((index + 1) / parts.length) * 0.82,
+      });
 
-        const tsBytes = await fetchMediaPart(parts[index], options.signal);
-        const fragments = await transmuxTsSegment(transmuxer, tsBytes);
-        for (const fragment of fragments) {
-          if (!wroteInitSegment && fragment.initSegment?.byteLength) {
-            outputParts.push(new Blob([toBlobPart(fragment.initSegment)], { type: "video/mp4" }));
-            wroteInitSegment = true;
-          }
-          if (fragment.data?.byteLength) {
-            outputParts.push(new Blob([toBlobPart(fragment.data)], { type: "video/mp4" }));
-          }
+      let tsBytes = await fetchMediaPart(parts[index], options.signal);
+      let fragments: MuxSegment[];
+      try {
+        fragments = await transmuxTsSegment(muxjs, tsBytes);
+      } catch (firstError) {
+        if (options.signal?.aborted) throw new DOMException("Download canceled", "AbortError");
+        // A transient CDN/body issue should not kill a multi-thousand-part download.
+        // Re-fetch once and retry with another fresh transmuxer.
+        tsBytes = await fetchMediaPart(parts[index], options.signal);
+        try {
+          fragments = await transmuxTsSegment(muxjs, tsBytes);
+        } catch {
+          const detail = firstError instanceof Error ? firstError.message : "conversion failed";
+          throw new Error(`Video part ${index + 1} of ${parts.length} could not be converted: ${detail}`);
         }
       }
-    } finally {
-      transmuxer.dispose?.();
+
+      for (const fragment of fragments) {
+        if (!wroteInitSegment && fragment.initSegment?.byteLength) {
+          outputParts.push(new Blob([toBlobPart(fragment.initSegment)], { type: "video/mp4" }));
+          wroteInitSegment = true;
+        }
+        if (fragment.data?.byteLength) {
+          outputParts.push(new Blob([toBlobPart(fragment.data)], { type: "video/mp4" }));
+        }
+      }
     }
 
     if (!wroteInitSegment || outputParts.length < 2) {
