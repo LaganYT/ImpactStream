@@ -3,6 +3,7 @@ const FFMPEG_PACKAGE_URL = "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/
 const FFMPEG_PACKAGE_BASE = "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/esm";
 const FFMPEG_UTIL_URL = "https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.2/dist/esm/index.js";
 const FFMPEG_CORE_URL = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm";
+const MUX_JS_URL = "https://cdn.jsdelivr.net/npm/mux.js@6.3.0/dist/mux.min.js";
 
 type MediaType = "movie" | "tv";
 type ExtractResult = { hls_url?: string | null; error?: string | null };
@@ -24,6 +25,29 @@ type ProgressUpdate = {
   progress: number;
 };
 
+type MuxSegment = {
+  initSegment?: Uint8Array;
+  data?: Uint8Array;
+};
+type MuxTransmuxer = {
+  on: (event: string, callback: (segment?: MuxSegment) => void) => void;
+  off?: (event: string, callback: (segment?: MuxSegment) => void) => void;
+  push: (data: Uint8Array) => void;
+  flush: () => void;
+  dispose?: () => void;
+};
+type MuxJs = {
+  mp4: {
+    Transmuxer: new (options?: Record<string, unknown>) => MuxTransmuxer;
+  };
+};
+
+declare global {
+  interface Window {
+    muxjs?: MuxJs;
+  }
+}
+
 export type VidsrcDownloadRequest = {
   tmdbId: number;
   mediaType: MediaType;
@@ -36,6 +60,7 @@ type DownloadOptions = {
   onProgress?: (update: ProgressUpdate) => void;
 };
 type PlaylistFile = { name: string; url: string };
+type MobileMediaPart = { url: string; range?: string };
 
 function getApiBase(): string {
   return (process.env.NEXT_PUBLIC_VIDSRC_API_URL || DEFAULT_API_BASE).replace(/\/$/, "");
@@ -117,17 +142,222 @@ function isMobileDevice(): boolean {
   return mobileUserAgent || iPadDesktopMode;
 }
 
-function startMobileStreamDownload(streamUrl: string, input: VidsrcDownloadRequest) {
-  const downloadUrl = new URL("/api/download-hls", window.location.origin);
-  downloadUrl.searchParams.set("url", streamUrl);
-  downloadUrl.searchParams.set("filename", downloadName(input));
+function parseMobileMediaParts(manifest: string, playlistUrl: string) {
+  const parts: MobileMediaPart[] = [];
+  let initPart: MobileMediaPart | null = null;
+  let pendingRange: string | undefined;
+  let previousRangeEnd = -1;
 
+  for (const rawLine of manifest.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    const map = line.match(/^#EXT-X-MAP:.*URI="([^"]+)"/);
+    if (map) {
+      const rangeMatch = line.match(/BYTERANGE="(\d+)(?:@(\d+))?"/);
+      let range: string | undefined;
+      if (rangeMatch) {
+        const length = Number(rangeMatch[1]);
+        const offset = rangeMatch[2] == null ? 0 : Number(rangeMatch[2]);
+        range = `bytes=${offset}-${offset + length - 1}`;
+      }
+      initPart = { url: absoluteUrl(map[1], playlistUrl), range };
+      continue;
+    }
+
+    if (line.startsWith("#EXT-X-BYTERANGE:")) {
+      const value = line.slice("#EXT-X-BYTERANGE:".length);
+      const [lengthText, offsetText] = value.split("@");
+      const length = Number(lengthText);
+      const offset = offsetText == null ? previousRangeEnd + 1 : Number(offsetText);
+      if (!Number.isFinite(length) || length <= 0 || !Number.isFinite(offset) || offset < 0) {
+        throw new Error("This HLS stream has an invalid byte range.");
+      }
+      previousRangeEnd = offset + length - 1;
+      pendingRange = `bytes=${offset}-${previousRangeEnd}`;
+      continue;
+    }
+
+    if (line.startsWith("#")) continue;
+    parts.push({ url: absoluteUrl(line, playlistUrl), range: pendingRange });
+    pendingRange = undefined;
+  }
+
+  return { initPart, parts };
+}
+
+async function fetchMediaPart(part: MobileMediaPart, signal?: AbortSignal) {
+  const headers: HeadersInit = {};
+  if (part.range) headers.Range = part.range;
+  const response = await fetch(part.url, { signal, headers });
+  if (!response.ok) throw new Error(`Video part failed (${response.status}).`);
+  return new Uint8Array(await response.arrayBuffer());
+}
+
+async function loadMuxJs(signal?: AbortSignal): Promise<MuxJs> {
+  if (window.muxjs) return window.muxjs;
+
+  await new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException("Download canceled", "AbortError"));
+      return;
+    }
+
+    const existing = document.querySelector<HTMLScriptElement>(`script[src="${MUX_JS_URL}"]`);
+    const script = existing || document.createElement("script");
+    const abort = () => reject(new DOMException("Download canceled", "AbortError"));
+    const loaded = () => resolve();
+    const failed = () => reject(new Error("Could not load the mobile MP4 converter."));
+
+    script.addEventListener("load", loaded, { once: true });
+    script.addEventListener("error", failed, { once: true });
+    signal?.addEventListener("abort", abort, { once: true });
+
+    if (!existing) {
+      script.src = MUX_JS_URL;
+      script.async = true;
+      script.crossOrigin = "anonymous";
+      document.head.appendChild(script);
+    }
+  });
+
+  if (!window.muxjs) throw new Error("The mobile MP4 converter did not initialize.");
+  return window.muxjs;
+}
+
+function saveMp4Blob(parts: BlobPart[], input: VidsrcDownloadRequest) {
+  const objectUrl = URL.createObjectURL(new Blob(parts, { type: "video/mp4" }));
   const link = document.createElement("a");
-  link.href = downloadUrl.toString();
-  link.rel = "noopener";
+  link.href = objectUrl;
+  link.download = `${downloadName(input)}.mp4`;
   document.body.appendChild(link);
   link.click();
   link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+}
+
+async function transmuxTsSegment(transmuxer: MuxTransmuxer, bytes: Uint8Array) {
+  return new Promise<MuxSegment[]>((resolve, reject) => {
+    const output: MuxSegment[] = [];
+    let settled = false;
+
+    const cleanup = () => {
+      transmuxer.off?.("data", onData);
+      transmuxer.off?.("done", onDone);
+    };
+    const onData = (segment?: MuxSegment) => {
+      if (segment) output.push(segment);
+    };
+    const onDone = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(output);
+    };
+
+    transmuxer.on("data", onData);
+    transmuxer.on("done", onDone);
+
+    try {
+      transmuxer.push(bytes);
+      transmuxer.flush();
+      // Older mux.js builds can synchronously emit data without a done event in some paths.
+      window.setTimeout(() => {
+        if (!settled && output.length > 0) onDone();
+        else if (!settled) {
+          settled = true;
+          cleanup();
+          reject(new Error("The mobile MP4 converter produced no output."));
+        }
+      }, 0);
+    } catch (error) {
+      settled = true;
+      cleanup();
+      reject(error);
+    }
+  });
+}
+
+async function downloadMobileMp4(
+  streamUrl: string,
+  input: VidsrcDownloadRequest,
+  options: DownloadOptions,
+  report: (update: ProgressUpdate) => void,
+) {
+  report({ stage: "loading", message: "Preparing mobile MP4 download", progress: 0.06 });
+  const selected = await selectMediaPlaylist(streamUrl, options.signal);
+  if (!selected.manifest.includes("#EXT-X-ENDLIST")) {
+    throw new Error("This stream is live or unfinished, so it cannot be saved as an MP4.");
+  }
+  if (selected.manifest.includes("#EXT-X-KEY")) {
+    throw new Error("Encrypted HLS streams are not supported.");
+  }
+
+  const { initPart, parts } = parseMobileMediaParts(selected.manifest, selected.url);
+  if (!parts.length) throw new Error("The HLS playlist contains no video parts.");
+
+  const outputParts: BlobPart[] = [];
+
+  // fMP4 HLS is already made of MP4 initialization/media fragments. No transmuxer is
+  // necessary; keeping each fragment as a Blob avoids building a second giant typed array.
+  if (initPart) {
+    const initBytes = await fetchMediaPart(initPart, options.signal);
+    outputParts.push(new Blob([initBytes], { type: "video/mp4" }));
+
+    for (let index = 0; index < parts.length; index += 1) {
+      if (options.signal?.aborted) throw new DOMException("Download canceled", "AbortError");
+      report({
+        stage: "downloading",
+        message: `Downloading video part ${index + 1} of ${parts.length}`,
+        progress: 0.1 + ((index + 1) / parts.length) * 0.82,
+      });
+      const bytes = await fetchMediaPart(parts[index], options.signal);
+      outputParts.push(new Blob([bytes], { type: "video/mp4" }));
+    }
+  } else {
+    // The vidsrc streams we currently see are MPEG-TS (even when their URLs end in .html).
+    // mux.js transmuxes H.264/AAC from each TS segment into fragmented MP4 without the
+    // ffmpeg.wasm virtual filesystem and its several whole-video memory copies.
+    const muxjs = await loadMuxJs(options.signal);
+    const transmuxer = new muxjs.mp4.Transmuxer({
+      keepOriginalTimestamps: true,
+      remux: true,
+    });
+    let wroteInitSegment = false;
+
+    try {
+      for (let index = 0; index < parts.length; index += 1) {
+        if (options.signal?.aborted) throw new DOMException("Download canceled", "AbortError");
+        report({
+          stage: "downloading",
+          message: `Downloading and converting video part ${index + 1} of ${parts.length}`,
+          progress: 0.1 + ((index + 1) / parts.length) * 0.82,
+        });
+
+        const tsBytes = await fetchMediaPart(parts[index], options.signal);
+        const fragments = await transmuxTsSegment(transmuxer, tsBytes);
+        for (const fragment of fragments) {
+          if (!wroteInitSegment && fragment.initSegment?.byteLength) {
+            outputParts.push(new Blob([fragment.initSegment], { type: "video/mp4" }));
+            wroteInitSegment = true;
+          }
+          if (fragment.data?.byteLength) {
+            outputParts.push(new Blob([fragment.data], { type: "video/mp4" }));
+          }
+        }
+      }
+    } finally {
+      transmuxer.dispose?.();
+    }
+
+    if (!wroteInitSegment || outputParts.length < 2) {
+      throw new Error("The mobile MP4 converter could not create a valid MP4.");
+    }
+  }
+
+  report({ stage: "saving", message: "Saving the MP4", progress: 0.98 });
+  saveMp4Blob(outputParts, input);
+  report({ stage: "saving", message: "Download started", progress: 1 });
 }
 
 export async function extractVidsrcStream(input: VidsrcDownloadRequest, signal?: AbortSignal) {
@@ -157,19 +387,12 @@ export async function downloadVidsrcMp4(input: VidsrcDownloadRequest, options: D
     report({ stage: "extracting", message: "Finding the video stream", progress: 0.02 });
     const streamUrl = await extractVidsrcStream(input, options.signal);
 
-    // ffmpeg.wasm stores the HLS parts, its virtual filesystem, the converted output,
-    // and the final browser Blob in memory at the same time. That is fine on desktop,
-    // but large videos can exceed Safari/Chrome mobile tab memory limits. On mobile,
-    // hand the stream to a server endpoint that forwards each HLS part directly to the
-    // browser instead, keeping phone memory nearly constant throughout the download.
     if (isMobileDevice()) {
-      if (options.signal?.aborted) throw new DOMException("Download canceled", "AbortError");
-      report({ stage: "downloading", message: "Starting low-memory mobile download", progress: 0.9 });
-      startMobileStreamDownload(streamUrl, input);
-      report({ stage: "saving", message: "Download started", progress: 1 });
+      await downloadMobileMp4(streamUrl, input, options, report);
       return;
     }
 
+    // Desktop intentionally keeps the existing ffmpeg.wasm flow unchanged.
     report({ stage: "loading", message: "Loading the MP4 converter", progress: 0.08 });
     const dynamicImport = Function("url", "return import(url)") as (url: string) => Promise<any>;
     const [{ FFmpeg }, { toBlobURL }] = await Promise.all([
