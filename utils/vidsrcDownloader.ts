@@ -225,6 +225,10 @@ async function loadMuxJs(signal?: AbortSignal): Promise<MuxJs> {
   return window.muxjs;
 }
 
+function toBlobPart(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
+  return Uint8Array.from(bytes);
+}
+
 function saveMp4Blob(parts: BlobPart[], input: VidsrcDownloadRequest) {
   const objectUrl = URL.createObjectURL(new Blob(parts, { type: "video/mp4" }));
   const link = document.createElement("a");
@@ -261,7 +265,6 @@ async function transmuxTsSegment(transmuxer: MuxTransmuxer, bytes: Uint8Array) {
     try {
       transmuxer.push(bytes);
       transmuxer.flush();
-      // Older mux.js builds can synchronously emit data without a done event in some paths.
       window.setTimeout(() => {
         if (!settled && output.length > 0) onDone();
         else if (!settled) {
@@ -298,11 +301,9 @@ async function downloadMobileMp4(
 
   const outputParts: BlobPart[] = [];
 
-  // fMP4 HLS is already made of MP4 initialization/media fragments. No transmuxer is
-  // necessary; keeping each fragment as a Blob avoids building a second giant typed array.
   if (initPart) {
     const initBytes = await fetchMediaPart(initPart, options.signal);
-    outputParts.push(new Blob([initBytes], { type: "video/mp4" }));
+    outputParts.push(new Blob([toBlobPart(initBytes)], { type: "video/mp4" }));
 
     for (let index = 0; index < parts.length; index += 1) {
       if (options.signal?.aborted) throw new DOMException("Download canceled", "AbortError");
@@ -312,12 +313,9 @@ async function downloadMobileMp4(
         progress: 0.1 + ((index + 1) / parts.length) * 0.82,
       });
       const bytes = await fetchMediaPart(parts[index], options.signal);
-      outputParts.push(new Blob([bytes], { type: "video/mp4" }));
+      outputParts.push(new Blob([toBlobPart(bytes)], { type: "video/mp4" }));
     }
   } else {
-    // The vidsrc streams we currently see are MPEG-TS (even when their URLs end in .html).
-    // mux.js transmuxes H.264/AAC from each TS segment into fragmented MP4 without the
-    // ffmpeg.wasm virtual filesystem and its several whole-video memory copies.
     const muxjs = await loadMuxJs(options.signal);
     const transmuxer = new muxjs.mp4.Transmuxer({
       keepOriginalTimestamps: true,
@@ -338,11 +336,11 @@ async function downloadMobileMp4(
         const fragments = await transmuxTsSegment(transmuxer, tsBytes);
         for (const fragment of fragments) {
           if (!wroteInitSegment && fragment.initSegment?.byteLength) {
-            outputParts.push(new Blob([fragment.initSegment], { type: "video/mp4" }));
+            outputParts.push(new Blob([toBlobPart(fragment.initSegment)], { type: "video/mp4" }));
             wroteInitSegment = true;
           }
           if (fragment.data?.byteLength) {
-            outputParts.push(new Blob([fragment.data], { type: "video/mp4" }));
+            outputParts.push(new Blob([toBlobPart(fragment.data)], { type: "video/mp4" }));
           }
         }
       }
@@ -392,7 +390,6 @@ export async function downloadVidsrcMp4(input: VidsrcDownloadRequest, options: D
       return;
     }
 
-    // Desktop intentionally keeps the existing ffmpeg.wasm flow unchanged.
     report({ stage: "loading", message: "Loading the MP4 converter", progress: 0.08 });
     const dynamicImport = Function("url", "return import(url)") as (url: string) => Promise<any>;
     const [{ FFmpeg }, { toBlobURL }] = await Promise.all([
