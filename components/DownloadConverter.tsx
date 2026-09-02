@@ -1,16 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { FaDownload, FaTimes } from "react-icons/fa";
+import type { VidsrcDownloadRequest } from "../utils/vidsrcDownloader";
 import {
-  downloadVidsrcMp4,
-  fetchMovieDownloadLinks,
-  type MovieDownloadLink,
-  type VidsrcDownloadRequest,
-} from "../utils/vidsrcDownloader";
+  fetchSheguDownloadLinks,
+  type SheguDownloadLink,
+} from "../utils/sheguDownloader";
 
 type Props = { request: VidsrcDownloadRequest; onClose: () => void };
 type Status = "working" | "done" | "error" | "canceled";
 
-function qualityLabel(link: MovieDownloadLink) {
+function qualityLabel(link: SheguDownloadLink) {
   if (link.quality >= 2160) return "4K";
   if (link.quality >= 1440) return "1440p";
   if (link.quality >= 1080) return "1080p";
@@ -20,60 +19,41 @@ function qualityLabel(link: MovieDownloadLink) {
 
 export default function DownloadConverter({ request, onClose }: Props) {
   const [status, setStatus] = useState<Status>("working");
-  const [message, setMessage] = useState(
-    request.mediaType === "movie" ? "Finding direct downloads" : "Preparing download"
-  );
-  const [progress, setProgress] = useState(0);
-  const [movieLinks, setMovieLinks] = useState<MovieDownloadLink[]>([]);
+  const [message, setMessage] = useState("Finding direct downloads");
+  const [downloadLinks, setDownloadLinks] = useState<SheguDownloadLink[]>([]);
   const controllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
     controllerRef.current = controller;
     setStatus("working");
-    setProgress(0);
-    setMovieLinks([]);
+    setMessage("Finding direct downloads");
+    setDownloadLinks([]);
 
-    if (request.mediaType === "movie") {
-      setMessage("Finding direct downloads");
-      fetchMovieDownloadLinks(request.tmdbId, controller.signal)
-        .then((links) => {
-          setMovieLinks(links);
-          setMessage(`${links.length} download option${links.length === 1 ? "" : "s"} available`);
-          setProgress(1);
-          setStatus("done");
-        })
-        .catch((error) => {
-          if (error instanceof DOMException && error.name === "AbortError") {
-            setStatus("canceled");
-            setMessage("Download lookup canceled");
-          } else {
-            setStatus("error");
-            setMessage(error instanceof Error ? error.message : "Could not load download options.");
-          }
-        });
-
-      return () => controller.abort();
-    }
-
-    setMessage("Preparing download");
-    downloadVidsrcMp4(request, {
-      signal: controller.signal,
-      onProgress: (update) => {
-        setMessage(update.message);
-        setProgress(update.progress);
+    fetchSheguDownloadLinks(
+      {
+        tmdbId: request.tmdbId,
+        mediaType: request.mediaType,
+        season: request.season,
+        episode: request.episode,
       },
-    })
-      .then(() => setStatus("done"))
+      controller.signal
+    )
+      .then((links) => {
+        setDownloadLinks(links);
+        setMessage(`${links.length} download option${links.length === 1 ? "" : "s"} available`);
+        setStatus("done");
+      })
       .catch((error) => {
         if (error instanceof DOMException && error.name === "AbortError") {
           setStatus("canceled");
-          setMessage("Download canceled");
+          setMessage("Download lookup canceled");
         } else {
           setStatus("error");
-          setMessage(error instanceof Error ? error.message : "The download failed.");
+          setMessage(error instanceof Error ? error.message : "Could not load download options.");
         }
       });
+
     return () => controller.abort();
   }, [request]);
 
@@ -82,7 +62,10 @@ export default function DownloadConverter({ request, onClose }: Props) {
     onClose();
   };
 
-  const isMovie = request.mediaType === "movie";
+  const episodeLabel =
+    request.mediaType === "tv"
+      ? ` · S${String(request.season || 1).padStart(2, "0")}E${String(request.episode || 1).padStart(2, "0")}`
+      : "";
 
   return (
     <div className="download-modal-backdrop" role="presentation">
@@ -91,7 +74,7 @@ export default function DownloadConverter({ request, onClose }: Props) {
         role="dialog"
         aria-modal="true"
         aria-label="Download video"
-        style={isMovie ? { width: "min(680px, 100%)" } : undefined}
+        style={{ width: "min(680px, 100%)" }}
       >
         <button className="download-modal-close" onClick={close} aria-label="Close download">
           <FaTimes />
@@ -99,10 +82,13 @@ export default function DownloadConverter({ request, onClose }: Props) {
         <div className="download-converter-icon">
           <FaDownload />
         </div>
-        <h3>{request.title}</h3>
+        <h3>
+          {request.title}
+          {episodeLabel}
+        </h3>
         <p className={status === "error" ? "download-status-error" : undefined}>{message}</p>
 
-        {isMovie && movieLinks.length > 0 ? (
+        {downloadLinks.length > 0 ? (
           <div
             style={{
               display: "grid",
@@ -113,7 +99,7 @@ export default function DownloadConverter({ request, onClose }: Props) {
               textAlign: "left",
             }}
           >
-            {movieLinks.map((link, index) => (
+            {downloadLinks.map((link, index) => (
               <a
                 key={`${link.url}-${index}`}
                 href={link.url}
@@ -141,20 +127,9 @@ export default function DownloadConverter({ request, onClose }: Props) {
               </a>
             ))}
           </div>
-        ) : (
-          <>
-            <div
-              className="download-progress-track"
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={Math.round(progress * 100)}
-            >
-              <span style={{ width: `${Math.round(progress * 100)}%` }} />
-            </div>
-            <span className="download-progress-label">{Math.round(progress * 100)}%</span>
-          </>
-        )}
+        ) : status === "working" ? (
+          <div className="tm-loading">Loading</div>
+        ) : null}
 
         <button className="download-cancel" onClick={status === "working" ? close : onClose}>
           {status === "working" ? "Cancel" : "Close"}
