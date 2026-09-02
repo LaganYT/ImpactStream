@@ -7,6 +7,7 @@ export type SheguDownloadLink = {
   url: string;
   size: string;
   provider: string;
+  filename?: string;
 };
 
 type SheguDownloadResponse = {
@@ -35,7 +36,8 @@ function isValidDownloadLink(value: unknown): value is SheguDownloadLink {
     typeof link.url === "string" &&
     link.url.length > 0 &&
     typeof link.size === "string" &&
-    typeof link.provider === "string"
+    typeof link.provider === "string" &&
+    (link.filename === undefined || typeof link.filename === "string")
   );
 }
 
