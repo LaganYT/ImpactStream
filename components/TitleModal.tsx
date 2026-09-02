@@ -13,6 +13,7 @@ import {
 import { FaDownload, FaPlay, FaStar, FaTimes, FaVolumeMute, FaVolumeUp } from "react-icons/fa";
 import EpisodeList, { EpisodeInfo } from "./EpisodeList";
 import { getMediaType, isAnimeItem, RoutableMediaItem } from "../utils/mediaRouting";
+import { openVidsrcDownloader } from "../utils/vidsrcDownloader";
 
 export type TitleRef = {
   id: number;
@@ -80,18 +81,6 @@ function formatRuntime(minutes?: number): string | null {
   return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
 }
 
-function buildDownloadUrl(
-  mediaType: "movie" | "tv",
-  tmdbId: number,
-  season?: number,
-  episode?: number
-) {
-  if (mediaType === "tv") {
-    return `https://1embed.cc/download/tv/${tmdbId}/${season || 1}/${episode || 1}`;
-  }
-  return `https://1embed.cc/download/movie/${tmdbId}`;
-}
-
 function TitleModal({
   titleRef,
   onClose,
@@ -107,6 +96,8 @@ function TitleModal({
   const [seasonNumber, setSeasonNumber] = useState(1);
   const [episodes, setEpisodes] = useState<EpisodeInfo[]>([]);
   const [isTrailerMuted, setIsTrailerMuted] = useState(true);
+  const [downloadingEpisode, setDownloadingEpisode] = useState<number | null>(null);
+  const [downloadError, setDownloadError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -114,6 +105,8 @@ function TitleModal({
     setEpisodes([]);
     setSeasonNumber(1);
     setIsTrailerMuted(true);
+    setDownloadingEpisode(null);
+    setDownloadError("");
 
     const fetchDetails = async () => {
       try {
@@ -233,12 +226,23 @@ function TitleModal({
     setIsTrailerMuted(!isTrailerMuted);
   };
 
-  const handleDownload = (episode?: number) => {
-    window.open(
-      buildDownloadUrl(titleRef.mediaType, titleRef.id, seasonNumber, episode),
-      "_blank",
-      "noreferrer"
-    );
+  const handleDownload = async (episode?: number) => {
+    const marker = titleRef.mediaType === "movie" ? 0 : episode || 1;
+    setDownloadingEpisode(marker);
+    setDownloadError("");
+
+    try {
+      await openVidsrcDownloader({
+        tmdbId: titleRef.id,
+        mediaType: titleRef.mediaType,
+        season: seasonNumber,
+        episode,
+      });
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : "The download could not be prepared.");
+    } finally {
+      setDownloadingEpisode(null);
+    }
   };
 
   const cast = (details?.credits?.cast || []).slice(0, 5).map((person) => person.name);
@@ -301,9 +305,10 @@ function TitleModal({
                   <button
                     className="btn-more-info"
                     onClick={() => handleDownload()}
+                    disabled={downloadingEpisode === 0}
                   >
                     <FaDownload />
-                    Download
+                    {downloadingEpisode === 0 ? "Preparing..." : "Download"}
                   </button>
                 ) : null}
               </div>
@@ -367,7 +372,12 @@ function TitleModal({
                     onSeasonChange={setSeasonNumber}
                     onEpisodeSelect={handleEpisodeSelect}
                     onEpisodeDownload={(episode) => handleDownload(episode)}
+                    downloadingEpisode={downloadingEpisode || undefined}
                   />
+                ) : null}
+
+                {downloadError ? (
+                  <p className="download-inline-error" role="alert">{downloadError}</p>
                 ) : null}
 
                 {recommendations.length ? (
