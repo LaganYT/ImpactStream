@@ -721,14 +721,16 @@ button:active {
   color: #fecaca;
 }
 
-.download-inline-error {
-  margin: 1rem 0;
-  padding: 0.75rem 1rem;
-  border: 1px solid rgba(248, 113, 113, 0.45);
-  border-radius: 8px;
-  background: rgba(127, 29, 29, 0.25);
-  color: #fecaca;
-}
+.download-converter { position: relative; width: min(440px, 100%); padding: 2rem; border: 1px solid rgba(255,255,255,.14); border-radius: 16px; background: #111218; color: #fff; text-align: center; box-shadow: 0 24px 70px rgba(0,0,0,.65); }
+.download-converter .download-modal-close { position: absolute; top: 1rem; right: 1rem; }
+.download-converter-icon { width: 52px; height: 52px; margin: 0 auto 1rem; border-radius: 50%; display: grid; place-items: center; background: rgba(229,9,20,.16); color: #ff4d57; font-size: 1.2rem; }
+.download-converter h3 { margin: 0 2rem .5rem; font-size: 1.15rem; }
+.download-converter p { min-height: 1.5em; margin: 0 0 1.25rem; color: rgba(255,255,255,.68); }
+.download-converter p.download-status-error { color: #fecaca; }
+.download-progress-track { height: 8px; overflow: hidden; border-radius: 999px; background: rgba(255,255,255,.1); }
+.download-progress-track span { display: block; height: 100%; border-radius: inherit; background: #e50914; transition: width 180ms ease; }
+.download-progress-label { display: block; margin: .65rem 0 1.25rem; color: rgba(255,255,255,.72); font-size: .85rem; }
+.download-cancel { padding: .65rem 1.25rem; border: 1px solid rgba(255,255,255,.2); border-radius: 8px; background: rgba(255,255,255,.08); color: #fff; }
 
 /* Trending Section */
 .trending {
