@@ -1,10 +1,7 @@
 const DEFAULT_API_BASE = "https://vidsrc-scraper-serverless.vercel.app";
-const FFMPEG_PACKAGE_URL = "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/esm/index.js";
-const FFMPEG_PACKAGE_BASE = "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/esm";
-const FFMPEG_UTIL_URL = "https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.2/dist/esm/index.js";
-const FFMPEG_CORE_URL = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm";
 const MUX_JS_URL = "https://cdn.jsdelivr.net/npm/mux.js@6.3.0/dist/mux.min.js";
 const LOG_PREFIX = "[ImpactStream Download]";
+const FETCH_RETRY_DELAYS = [0, 750, 1500, 3000, 6000, 10000];
 
 type MediaType = "movie" | "tv";
 type ExtractResult = { hls_url?: string | null; error?: string | null };
@@ -12,13 +9,6 @@ type ExtractResponse = {
   success?: boolean;
   error?: string;
   results?: Record<string, ExtractResult>;
-};
-type FFmpegInstance = {
-  load: (config: { coreURL: string; wasmURL: string; classWorkerURL: string }) => Promise<void>;
-  writeFile: (path: string, data: Uint8Array) => Promise<void>;
-  readFile: (path: string) => Promise<Uint8Array | string>;
-  exec: (args: string[]) => Promise<number>;
-  terminate: () => void;
 };
 type ProgressUpdate = {
   stage: "extracting" | "loading" | "downloading" | "converting" | "saving";
@@ -29,7 +19,6 @@ type DownloadOptions = {
   signal?: AbortSignal;
   onProgress?: (update: ProgressUpdate) => void;
 };
-type PlaylistFile = { name: string; url: string };
 type MediaPart = { url: string; range?: string };
 type FetchResult = {
   bytes: Uint8Array;
@@ -84,7 +73,7 @@ function safeUrlForLog(value: string) {
   }
 }
 
-function bytePreview(bytes: Uint8Array, count = 16) {
+function bytePreview(bytes: Uint8Array, count = 24) {
   return Array.from(bytes.subarray(0, count))
     .map((value) => value.toString(16).padStart(2, "0"))
     .join(" ");
@@ -116,6 +105,12 @@ function isMobileDevice() {
   return mobileUserAgent || iPadDesktopMode;
 }
 
+function segmentConcurrency() {
+  if (isMobileDevice()) return 3;
+  const cores = typeof navigator === "undefined" ? 8 : navigator.hardwareConcurrency || 8;
+  return Math.max(4, Math.min(8, Math.ceil(cores / 2)));
+}
+
 function findStream(payload: ExtractResponse): string | null {
   for (const result of Object.values(payload.results || {})) {
     if (typeof result?.hls_url === "string" && result.hls_url.length > 0) return result.hls_url;
@@ -123,18 +118,29 @@ function findStream(payload: ExtractResponse): string | null {
   return null;
 }
 
+function sleep(ms: number, signal?: AbortSignal) {
+  if (ms <= 0) return Promise.resolve();
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException("Download canceled", "AbortError"));
+      return;
+    }
+    const timer = window.setTimeout(resolve, ms);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        window.clearTimeout(timer);
+        reject(new DOMException("Download canceled", "AbortError"));
+      },
+      { once: true },
+    );
+  });
+}
+
 async function fetchText(url: string, signal?: AbortSignal): Promise<string> {
   const response = await fetch(url, { signal });
   if (!response.ok) throw new Error(`Playlist request failed (${response.status}).`);
   return response.text();
-}
-
-async function createClassWorkerUrl(signal?: AbortSignal): Promise<string> {
-  const source = await fetchText(`${FFMPEG_PACKAGE_BASE}/worker.js`, signal);
-  const sameOriginSource = source
-    .replace('from "./const.js"', `from "${FFMPEG_PACKAGE_BASE}/const.js"`)
-    .replace('from "./errors.js"', `from "${FFMPEG_PACKAGE_BASE}/errors.js"`);
-  return URL.createObjectURL(new Blob([sameOriginSource], { type: "text/javascript" }));
 }
 
 function absoluteUrl(value: string, base: string): string {
@@ -158,25 +164,6 @@ async function selectMediaPlaylist(url: string, signal?: AbortSignal) {
 
   if (!best) throw new Error("No playable HLS variant was found.");
   return { url: best.url, manifest: await fetchText(best.url, signal) };
-}
-
-function rewritePlaylist(manifest: string, playlistUrl: string) {
-  const files: PlaylistFile[] = [];
-  const rewritten = manifest.split(/\r?\n/).map((line) => {
-    const map = line.match(/^#EXT-X-MAP:.*URI="([^"]+)"/);
-    if (map) {
-      const name = `init-${files.length}.mp4`;
-      files.push({ name, url: absoluteUrl(map[1], playlistUrl) });
-      return line.replace(map[1], name);
-    }
-    if (!line || line.startsWith("#")) return line;
-    const url = absoluteUrl(line, playlistUrl);
-    const extension = new URL(url).pathname.match(/\.[a-z0-9]+$/i)?.[0] || ".ts";
-    const name = `segment-${files.length}${extension}`;
-    files.push({ name, url });
-    return name;
-  });
-  return { manifest: rewritten.join("\n"), files };
 }
 
 function parseMediaParts(manifest: string, playlistUrl: string) {
@@ -246,18 +233,95 @@ function saveMp4Blob(parts: BlobPart[], input: VidsrcDownloadRequest) {
   return blob.size;
 }
 
-async function fetchMediaPart(part: MediaPart, signal?: AbortSignal): Promise<FetchResult> {
-  const headers: HeadersInit = {};
-  if (part.range) headers.Range = part.range;
-  const response = await fetch(part.url, { signal, headers });
-  if (!response.ok) throw new Error(`Video part failed (${response.status}).`);
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  return {
-    bytes,
-    status: response.status,
-    contentType: response.headers.get("content-type") || "",
-    contentLength: response.headers.get("content-length"),
-  };
+function isRetryableStatus(status: number) {
+  return status === 408 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+}
+
+async function fetchMediaPart(
+  part: MediaPart,
+  signal?: AbortSignal,
+  runId?: string,
+  partNumber?: number,
+  total?: number,
+): Promise<FetchResult> {
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < FETCH_RETRY_DELAYS.length; attempt += 1) {
+    if (signal?.aborted) throw new DOMException("Download canceled", "AbortError");
+    await sleep(FETCH_RETRY_DELAYS[attempt], signal);
+
+    const headers: HeadersInit = {};
+    if (part.range) headers.Range = part.range;
+
+    try {
+      const response = await fetch(part.url, { signal, headers });
+      if (!response.ok) {
+        const error = new Error(`Video part failed (${response.status}).`);
+        if (!isRetryableStatus(response.status)) throw error;
+        lastError = error;
+      } else {
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        if (attempt > 0 && runId) {
+          logDownload(runId, "log", "segment-fetch-recovered", {
+            part: partNumber,
+            total,
+            attempt: attempt + 1,
+            bytes: bytes.byteLength,
+          });
+        }
+        return {
+          bytes,
+          status: response.status,
+          contentType: response.headers.get("content-type") || "",
+          contentLength: response.headers.get("content-length"),
+        };
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") throw error;
+      lastError = error;
+    }
+
+    if (runId && attempt + 1 < FETCH_RETRY_DELAYS.length) {
+      logDownload(runId, "warn", "segment-fetch-retry", {
+        part: partNumber,
+        total,
+        attempt: attempt + 1,
+        error: errorMessage(lastError),
+        nextDelayMs: FETCH_RETRY_DELAYS[attempt + 1],
+        url: safeUrlForLog(part.url),
+      });
+    }
+  }
+
+  if (runId) {
+    logDownload(runId, "error", "segment-fetch-exhausted", {
+      part: partNumber,
+      total,
+      error: errorMessage(lastError),
+      url: safeUrlForLog(part.url),
+    });
+  }
+  throw lastError instanceof Error ? lastError : new Error("Video part could not be downloaded.");
+}
+
+async function fetchBatch(
+  parts: MediaPart[],
+  start: number,
+  concurrency: number,
+  signal: AbortSignal | undefined,
+  runId: string,
+) {
+  const end = Math.min(parts.length, start + concurrency);
+  return Promise.all(
+    parts.slice(start, end).map(async (part, offset) => {
+      const index = start + offset;
+      return {
+        index,
+        part,
+        result: await fetchMediaPart(part, signal, runId, index + 1, parts.length),
+      };
+    }),
+  );
 }
 
 async function loadMuxJs(signal?: AbortSignal): Promise<MuxJs> {
@@ -271,13 +335,13 @@ async function loadMuxJs(signal?: AbortSignal): Promise<MuxJs> {
 
     const existing = document.querySelector<HTMLScriptElement>(`script[src="${MUX_JS_URL}"]`);
     const script = existing || document.createElement("script");
-    const abort = () => reject(new DOMException("Download canceled", "AbortError"));
     const loaded = () => resolve();
     const failed = () => reject(new Error("Could not load the MP4 transmuxer."));
+    const aborted = () => reject(new DOMException("Download canceled", "AbortError"));
 
     script.addEventListener("load", loaded, { once: true });
     script.addEventListener("error", failed, { once: true });
-    signal?.addEventListener("abort", abort, { once: true });
+    signal?.addEventListener("abort", aborted, { once: true });
 
     if (!existing) {
       script.src = MUX_JS_URL;
@@ -291,34 +355,39 @@ async function loadMuxJs(signal?: AbortSignal): Promise<MuxJs> {
   return window.muxjs;
 }
 
-function hasTransportStreamSync(bytes: Uint8Array) {
-  if (bytes.byteLength < 188) return false;
-  const maxOffset = Math.min(187, bytes.byteLength - 1);
-  for (let offset = 0; offset <= maxOffset; offset += 1) {
-    if (bytes[offset] !== 0x47) continue;
-    if (offset + 188 >= bytes.byteLength || bytes[offset + 188] === 0x47) return true;
+function findTransportStreamOffset(bytes: Uint8Array) {
+  if (bytes.byteLength < 188) return -1;
+  const packetSizes = [188, 192, 204];
+  const scanLimit = Math.min(bytes.byteLength - 1, 64 * 1024);
+
+  for (const packetSize of packetSizes) {
+    for (let offset = 0; offset <= scanLimit; offset += 1) {
+      if (bytes[offset] !== 0x47) continue;
+      const second = offset + packetSize;
+      const third = second + packetSize;
+      if (second < bytes.byteLength && bytes[second] !== 0x47) continue;
+      if (third < bytes.byteLength && bytes[third] !== 0x47) continue;
+      return offset;
+    }
   }
-  return false;
+  return -1;
 }
 
-async function transmuxTsSegment(muxjs: MuxJs, bytes: Uint8Array) {
-  if (!hasTransportStreamSync(bytes)) {
-    throw new Error("The video part was not valid MPEG-TS data.");
-  }
-
-  const transmuxer = new muxjs.mp4.Transmuxer({
-    keepOriginalTimestamps: true,
-    remux: true,
-  });
+async function transmuxTsSegment(muxjs: MuxJs, originalBytes: Uint8Array) {
+  const syncOffset = findTransportStreamOffset(originalBytes);
+  // Do not reject a segment solely because our heuristic cannot find sync.
+  // mux.js is the authoritative parser and can handle some metadata-prefixed TS.
+  const bytes = syncOffset > 0 ? originalBytes.subarray(syncOffset) : originalBytes;
+  const transmuxer = new muxjs.mp4.Transmuxer({ keepOriginalTimestamps: true, remux: true });
 
   try {
     return await new Promise<MuxSegment[]>((resolve, reject) => {
       const output: MuxSegment[] = [];
       let settled = false;
-      let fallbackTimer: number | null = null;
+      let timer: number | null = null;
 
       const cleanup = () => {
-        if (fallbackTimer != null) window.clearTimeout(fallbackTimer);
+        if (timer != null) window.clearTimeout(timer);
         transmuxer.off?.("data", onData);
         transmuxer.off?.("done", onDone);
       };
@@ -326,7 +395,7 @@ async function transmuxTsSegment(muxjs: MuxJs, bytes: Uint8Array) {
         if (settled) return;
         settled = true;
         cleanup();
-        if (output.length > 0) resolve(output);
+        if (output.some((item) => item.data?.byteLength)) resolve(output);
         else reject(new Error("The MP4 transmuxer produced no output."));
       };
       const onData = (segment?: MuxSegment) => {
@@ -339,7 +408,7 @@ async function transmuxTsSegment(muxjs: MuxJs, bytes: Uint8Array) {
       try {
         transmuxer.push(bytes);
         transmuxer.flush();
-        fallbackTimer = window.setTimeout(finish, 500);
+        timer = window.setTimeout(finish, 750);
       } catch (error) {
         settled = true;
         cleanup();
@@ -351,7 +420,41 @@ async function transmuxTsSegment(muxjs: MuxJs, bytes: Uint8Array) {
   }
 }
 
-async function downloadMobileWithMux(
+async function refreshLogicalPart(
+  input: VidsrcDownloadRequest,
+  index: number,
+  expectedTotal: number,
+  signal: AbortSignal | undefined,
+  runId: string,
+) {
+  logDownload(runId, "warn", "playlist-refresh-started", {
+    part: index + 1,
+    expectedTotal,
+  });
+  sendServerDiagnostic(runId, "playlist-refresh-started", { part: index + 1, expectedTotal });
+
+  const freshStream = await extractVidsrcStream(input, signal);
+  const freshSelected = await selectMediaPlaylist(freshStream, signal);
+  const freshParsed = parseMediaParts(freshSelected.manifest, freshSelected.url);
+  if (freshParsed.initPart) throw new Error("The refreshed stream changed from MPEG-TS to fMP4.");
+  if (index >= freshParsed.parts.length) {
+    throw new Error(`The refreshed playlist only had ${freshParsed.parts.length} parts.`);
+  }
+
+  const freshPart = freshParsed.parts[index];
+  const result = await fetchMediaPart(freshPart, signal, runId, index + 1, freshParsed.parts.length);
+  logDownload(runId, "log", "playlist-refresh-part-fetched", {
+    part: index + 1,
+    oldTotal: expectedTotal,
+    freshTotal: freshParsed.parts.length,
+    bytes: result.bytes.byteLength,
+    contentType: result.contentType,
+    firstBytes: bytePreview(result.bytes),
+  });
+  return { part: freshPart, result, freshTotal: freshParsed.parts.length };
+}
+
+async function downloadWithMux(
   streamUrl: string,
   input: VidsrcDownloadRequest,
   options: DownloadOptions,
@@ -370,90 +473,147 @@ async function downloadMobileWithMux(
   const { initPart, parts } = parseMediaParts(selected.manifest, selected.url);
   if (!parts.length) throw new Error("The HLS playlist contains no video parts.");
 
-  const concurrency = 3;
-  logDownload(runId, "log", "mobile-playlist-ready", {
+  const concurrency = segmentConcurrency();
+  logDownload(runId, "log", "playlist-ready", {
     playlist: safeUrlForLog(selected.url),
     parts: parts.length,
     format: initPart ? "fmp4" : "mpeg-ts",
     concurrency,
+    mobile: isMobileDevice(),
+  });
+  sendServerDiagnostic(runId, "playlist-ready", {
+    parts: parts.length,
+    format: initPart ? "fmp4" : "mpeg-ts",
+    concurrency,
+    mobile: isMobileDevice(),
   });
 
   const outputParts: BlobPart[] = [];
+  let completed = 0;
 
   if (initPart) {
-    const init = await fetchMediaPart(initPart, options.signal);
+    const init = await fetchMediaPart(initPart, options.signal, runId, 0, parts.length);
     outputParts.push(new Blob([toBlobPart(init.bytes)], { type: "video/mp4" }));
 
     for (let start = 0; start < parts.length; start += concurrency) {
-      const batch = await Promise.all(
-        parts.slice(start, start + concurrency).map(async (part, offset) => ({
-          index: start + offset,
-          result: await fetchMediaPart(part, options.signal),
-        })),
-      );
+      const batch = await fetchBatch(parts, start, concurrency, options.signal, runId);
       for (const item of batch) {
         outputParts.push(new Blob([toBlobPart(item.result.bytes)], { type: "video/mp4" }));
       }
-      const completed = Math.min(start + batch.length, parts.length);
+      completed = batch[batch.length - 1].index + 1;
       report({
         stage: "downloading",
         message: `Downloading video part ${completed} of ${parts.length}`,
         progress: 0.1 + (completed / parts.length) * 0.82,
       });
+      if (completed % 100 < concurrency || completed === parts.length) {
+        logDownload(runId, "log", "download-progress", { completed, total: parts.length });
+      }
     }
   } else {
     const muxjs = await loadMuxJs(options.signal);
     let wroteInitSegment = false;
 
     for (let start = 0; start < parts.length; start += concurrency) {
-      const batch = await Promise.all(
-        parts.slice(start, start + concurrency).map(async (part, offset) => ({
-          index: start + offset,
-          part,
-          result: await fetchMediaPart(part, options.signal),
-        })),
-      );
+      const batch = await fetchBatch(parts, start, concurrency, options.signal, runId);
 
       for (const item of batch) {
+        if (options.signal?.aborted) throw new DOMException("Download canceled", "AbortError");
+
         let fragments: MuxSegment[];
+        let activeResult = item.result;
         try {
-          fragments = await transmuxTsSegment(muxjs, item.result.bytes);
+          fragments = await transmuxTsSegment(muxjs, activeResult.bytes);
         } catch (firstError) {
+          const syncOffset = findTransportStreamOffset(activeResult.bytes);
           logDownload(runId, "warn", "segment-mux-retry", {
             part: item.index + 1,
             total: parts.length,
             error: errorMessage(firstError),
-            contentType: item.result.contentType,
-            bytes: item.result.bytes.byteLength,
-            firstBytes: bytePreview(item.result.bytes),
+            url: safeUrlForLog(item.part.url),
+            status: activeResult.status,
+            contentType: activeResult.contentType,
+            bytes: activeResult.bytes.byteLength,
+            syncOffset,
+            firstBytes: bytePreview(activeResult.bytes),
           });
 
-          const retry = await fetchMediaPart(item.part, options.signal);
+          const sameUrlRetry = await fetchMediaPart(
+            item.part,
+            options.signal,
+            runId,
+            item.index + 1,
+            parts.length,
+          );
+
           try {
-            fragments = await transmuxTsSegment(muxjs, retry.bytes);
+            activeResult = sameUrlRetry;
+            fragments = await transmuxTsSegment(muxjs, sameUrlRetry.bytes);
           } catch (secondError) {
-            logDownload(runId, "error", "segment-mux-failed", {
+            logDownload(runId, "warn", "segment-refresh-retry", {
               part: item.index + 1,
               total: parts.length,
               firstError: errorMessage(firstError),
               secondError: errorMessage(secondError),
-              retryContentType: retry.contentType,
-              retryBytes: retry.bytes.byteLength,
-              retryFirstBytes: bytePreview(retry.bytes),
+              retryBytes: sameUrlRetry.bytes.byteLength,
+              retrySyncOffset: findTransportStreamOffset(sameUrlRetry.bytes),
+              retryFirstBytes: bytePreview(sameUrlRetry.bytes),
             });
-            sendServerDiagnostic(runId, "segment-mux-failed", {
-              part: item.index + 1,
-              total: parts.length,
-              firstError: errorMessage(firstError),
-              secondError: errorMessage(secondError),
-              retryContentType: retry.contentType,
-              retryBytes: retry.bytes.byteLength,
-              retryFirstBytes: bytePreview(retry.bytes),
-            });
-            throw new Error(
-              `Video part ${item.index + 1} of ${parts.length} could not be converted: ${errorMessage(secondError)}`,
+
+            const refreshed = await refreshLogicalPart(
+              input,
+              item.index,
+              parts.length,
+              options.signal,
+              runId,
             );
+
+            try {
+              activeResult = refreshed.result;
+              fragments = await transmuxTsSegment(muxjs, refreshed.result.bytes);
+              logDownload(runId, "log", "segment-refresh-recovered", {
+                part: item.index + 1,
+                total: parts.length,
+                freshTotal: refreshed.freshTotal,
+                bytes: refreshed.result.bytes.byteLength,
+                syncOffset: findTransportStreamOffset(refreshed.result.bytes),
+              });
+              sendServerDiagnostic(runId, "segment-refresh-recovered", {
+                part: item.index + 1,
+                total: parts.length,
+                freshTotal: refreshed.freshTotal,
+              });
+            } catch (thirdError) {
+              logDownload(runId, "error", "segment-mux-failed", {
+                part: item.index + 1,
+                total: parts.length,
+                firstError: errorMessage(firstError),
+                secondError: errorMessage(secondError),
+                refreshError: errorMessage(thirdError),
+                refreshedContentType: refreshed.result.contentType,
+                refreshedBytes: refreshed.result.bytes.byteLength,
+                refreshedSyncOffset: findTransportStreamOffset(refreshed.result.bytes),
+                refreshedFirstBytes: bytePreview(refreshed.result.bytes),
+              });
+              sendServerDiagnostic(runId, "segment-mux-failed", {
+                part: item.index + 1,
+                total: parts.length,
+                firstError: errorMessage(firstError),
+                secondError: errorMessage(secondError),
+                refreshError: errorMessage(thirdError),
+                refreshedContentType: refreshed.result.contentType,
+                refreshedBytes: refreshed.result.bytes.byteLength,
+                refreshedFirstBytes: bytePreview(refreshed.result.bytes),
+              });
+              throw new Error(
+                `Video part ${item.index + 1} of ${parts.length} could not be converted after refreshing the playlist: ${errorMessage(thirdError)}`,
+              );
+            }
           }
+        }
+
+        if (!activeResult.bytes.byteLength) {
+          throw new Error(`Video part ${item.index + 1} was empty.`);
         }
 
         for (const fragment of fragments) {
@@ -467,7 +627,7 @@ async function downloadMobileWithMux(
         }
       }
 
-      const completed = Math.min(start + batch.length, parts.length);
+      completed = batch[batch.length - 1].index + 1;
       report({
         stage: "downloading",
         message: `Downloading and converting video part ${completed} of ${parts.length}`,
@@ -488,124 +648,11 @@ async function downloadMobileWithMux(
   }
 
   report({ stage: "saving", message: "Saving the MP4", progress: 0.98 });
+  logDownload(runId, "log", "creating-final-blob", { blobParts: outputParts.length });
   const size = saveMp4Blob(outputParts, input);
-  logDownload(runId, "log", "download-started", { bytes: size, method: "mobile-mux" });
-  sendServerDiagnostic(runId, "download-started", { bytes: size, method: "mobile-mux" });
+  logDownload(runId, "log", "download-started", { bytes: size, method: "mux" });
+  sendServerDiagnostic(runId, "download-started", { bytes: size, method: "mux" });
   report({ stage: "saving", message: "Download started", progress: 1 });
-}
-
-async function downloadDesktopLikeMain(
-  streamUrl: string,
-  input: VidsrcDownloadRequest,
-  options: DownloadOptions,
-  report: (update: ProgressUpdate) => void,
-  runId: string,
-) {
-  let ffmpeg: FFmpegInstance | null = null;
-  let classWorkerUrl: string | null = null;
-
-  try {
-    report({ stage: "loading", message: "Loading the MP4 converter", progress: 0.08 });
-    logDownload(runId, "log", "desktop-main-flow-started");
-
-    const dynamicImport = Function("url", "return import(url)") as (url: string) => Promise<any>;
-    const [{ FFmpeg }, { toBlobURL }] = await Promise.all([
-      dynamicImport(FFMPEG_PACKAGE_URL),
-      dynamicImport(FFMPEG_UTIL_URL),
-    ]);
-
-    ffmpeg = new FFmpeg() as FFmpegInstance;
-    classWorkerUrl = await createClassWorkerUrl(options.signal);
-    await ffmpeg.load({
-      coreURL: await toBlobURL(`${FFMPEG_CORE_URL}/ffmpeg-core.js`, "text/javascript"),
-      wasmURL: await toBlobURL(`${FFMPEG_CORE_URL}/ffmpeg-core.wasm`, "application/wasm"),
-      classWorkerURL: classWorkerUrl,
-    });
-
-    const selected = await selectMediaPlaylist(streamUrl, options.signal);
-    if (!selected.manifest.includes("#EXT-X-ENDLIST")) {
-      throw new Error("This stream is live or unfinished, so it cannot be saved as an MP4.");
-    }
-    if (selected.manifest.includes("#EXT-X-KEY")) {
-      throw new Error("Encrypted HLS streams are not supported.");
-    }
-
-    const playlist = rewritePlaylist(selected.manifest, selected.url);
-    await ffmpeg.writeFile("input.m3u8", new TextEncoder().encode(playlist.manifest));
-
-    // Match main: fetch and write one segment at a time. Do not retain concurrent
-    // ArrayBuffers in JS while FFmpeg's virtual filesystem is already holding the media.
-    for (let index = 0; index < playlist.files.length; index += 1) {
-      if (options.signal?.aborted) {
-        throw new DOMException("Download canceled", "AbortError");
-      }
-
-      const file = playlist.files[index];
-      report({
-        stage: "downloading",
-        message: `Downloading video part ${index + 1} of ${playlist.files.length}`,
-        progress: 0.12 + ((index + 1) / playlist.files.length) * 0.68,
-      });
-
-      const response = await fetch(file.url, { signal: options.signal });
-      if (!response.ok) {
-        throw new Error(`Video part ${index + 1} failed (${response.status}).`);
-      }
-
-      await ffmpeg.writeFile(file.name, new Uint8Array(await response.arrayBuffer()));
-
-      const completed = index + 1;
-      if (completed % 100 === 0 || completed === playlist.files.length) {
-        logDownload(runId, "log", "desktop-download-progress", {
-          completed,
-          total: playlist.files.length,
-        });
-      }
-    }
-
-    report({ stage: "converting", message: "Converting HLS to MP4", progress: 0.84 });
-    logDownload(runId, "log", "desktop-ffmpeg-exec-started", { files: playlist.files.length });
-    const exitCode = await ffmpeg.exec([
-      "-allowed_extensions", "ALL",
-      "-i", "input.m3u8",
-      "-c", "copy",
-      "-movflags", "+faststart",
-      "output.mp4",
-    ]);
-    logDownload(runId, exitCode === 0 ? "log" : "error", "desktop-ffmpeg-exec-finished", { exitCode });
-
-    if (exitCode !== 0) {
-      throw new Error(`The MP4 converter stopped with code ${exitCode}.`);
-    }
-
-    report({ stage: "saving", message: "Saving the MP4", progress: 0.98 });
-    const output = await ffmpeg.readFile("output.mp4");
-    if (typeof output === "string") {
-      throw new Error("The converter returned an invalid MP4 file.");
-    }
-
-    const objectUrl = URL.createObjectURL(
-      new Blob([new Uint8Array(output)], { type: "video/mp4" }),
-    );
-    const link = document.createElement("a");
-    link.href = objectUrl;
-    link.download = `${downloadName(input)}.mp4`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
-
-    logDownload(runId, "log", "download-started", { method: "desktop-main-ffmpeg" });
-    sendServerDiagnostic(runId, "download-started", { method: "desktop-main-ffmpeg" });
-    report({ stage: "saving", message: "Download started", progress: 1 });
-  } catch (error) {
-    logDownload(runId, "error", "desktop-download-failed", { error: errorMessage(error) });
-    sendServerDiagnostic(runId, "desktop-download-failed", { error: errorMessage(error) });
-    throw error;
-  } finally {
-    ffmpeg?.terminate();
-    if (classWorkerUrl) URL.revokeObjectURL(classWorkerUrl);
-  }
 }
 
 export async function extractVidsrcStream(input: VidsrcDownloadRequest, signal?: AbortSignal) {
@@ -619,47 +666,47 @@ export async function extractVidsrcStream(input: VidsrcDownloadRequest, signal?:
 
   const response = await fetch(url.toString(), { signal });
   const payload = (await response.json().catch(() => null)) as ExtractResponse | null;
-  if (!response.ok || !payload) {
-    throw new Error(`Stream extraction failed (${response.status}).`);
-  }
+  if (!response.ok || !payload) throw new Error(`Stream extraction failed (${response.status}).`);
 
   const stream = findStream(payload);
   if (!payload.success || !stream) {
     const providerError = Object.values(payload.results || {}).find((item) => item?.error)?.error;
     throw new Error(payload.error || providerError || "The API did not return a downloadable stream.");
   }
-
   return stream;
 }
 
 export async function downloadVidsrcMp4(input: VidsrcDownloadRequest, options: DownloadOptions = {}) {
   const report = options.onProgress || (() => {});
   const runId = createRunId();
-  const mobile = isMobileDevice();
+  const concurrency = segmentConcurrency();
 
   logDownload(runId, "log", "download-start", {
     title: input.title,
     tmdbId: input.tmdbId,
     mediaType: input.mediaType,
-    mobile,
-    method: mobile ? "mobile-mux" : "desktop-main-ffmpeg",
+    mobile: isMobileDevice(),
+    concurrency,
+    method: "mux",
   });
   sendServerDiagnostic(runId, "download-start", {
     title: input.title,
     tmdbId: input.tmdbId,
     mediaType: input.mediaType,
-    mobile,
-    method: mobile ? "mobile-mux" : "desktop-main-ffmpeg",
+    mobile: isMobileDevice(),
+    concurrency,
+    method: "mux",
   });
 
-  report({ stage: "extracting", message: "Finding the video stream", progress: 0.02 });
-  const streamUrl = await extractVidsrcStream(input, options.signal);
-  logDownload(runId, "log", "stream-found", { stream: safeUrlForLog(streamUrl) });
-
-  if (mobile) {
-    await downloadMobileWithMux(streamUrl, input, options, report, runId);
-    return;
+  try {
+    report({ stage: "extracting", message: "Finding the video stream", progress: 0.02 });
+    const streamUrl = await extractVidsrcStream(input, options.signal);
+    logDownload(runId, "log", "stream-found", { stream: safeUrlForLog(streamUrl) });
+    await downloadWithMux(streamUrl, input, options, report, runId);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    logDownload(runId, "error", "download-failed", { error: errorMessage(error) });
+    sendServerDiagnostic(runId, "download-failed", { error: errorMessage(error) });
+    throw error;
   }
-
-  await downloadDesktopLikeMain(streamUrl, input, options, report, runId);
 }
