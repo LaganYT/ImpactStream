@@ -24,11 +24,7 @@ type ProgressUpdate = {
   message: string;
   progress: number;
 };
-
-type MuxSegment = {
-  initSegment?: Uint8Array;
-  data?: Uint8Array;
-};
+type MuxSegment = { initSegment?: Uint8Array; data?: Uint8Array };
 type MuxTransmuxer = {
   on: (event: string, callback: (segment?: MuxSegment) => void) => void;
   off?: (event: string, callback: (segment?: MuxSegment) => void) => void;
@@ -37,9 +33,7 @@ type MuxTransmuxer = {
   dispose?: () => void;
 };
 type MuxJs = {
-  mp4: {
-    Transmuxer: new (options?: Record<string, unknown>) => MuxTransmuxer;
-  };
+  mp4: { Transmuxer: new (options?: Record<string, unknown>) => MuxTransmuxer };
 };
 
 declare global {
@@ -60,7 +54,7 @@ type DownloadOptions = {
   onProgress?: (update: ProgressUpdate) => void;
 };
 type PlaylistFile = { name: string; url: string };
-type MobileMediaPart = { url: string; range?: string };
+type MediaPart = { url: string; range?: string };
 
 function getApiBase(): string {
   return (process.env.NEXT_PUBLIC_VIDSRC_API_URL || DEFAULT_API_BASE).replace(/\/$/, "");
@@ -77,14 +71,6 @@ async function fetchText(url: string, signal?: AbortSignal): Promise<string> {
   const response = await fetch(url, { signal });
   if (!response.ok) throw new Error(`Playlist request failed (${response.status}).`);
   return response.text();
-}
-
-async function createClassWorkerUrl(signal?: AbortSignal): Promise<string> {
-  const source = await fetchText(`${FFMPEG_PACKAGE_BASE}/worker.js`, signal);
-  const sameOriginSource = source
-    .replace('from "./const.js"', `from "${FFMPEG_PACKAGE_BASE}/const.js"`)
-    .replace('from "./errors.js"', `from "${FFMPEG_PACKAGE_BASE}/errors.js"`);
-  return URL.createObjectURL(new Blob([sameOriginSource], { type: "text/javascript" }));
 }
 
 function absoluteUrl(value: string, base: string): string {
@@ -109,25 +95,6 @@ async function selectMediaPlaylist(url: string, signal?: AbortSignal) {
   return { url: best.url, manifest: await fetchText(best.url, signal) };
 }
 
-function rewritePlaylist(manifest: string, playlistUrl: string) {
-  const files: PlaylistFile[] = [];
-  const rewritten = manifest.split(/\r?\n/).map((line) => {
-    const map = line.match(/^#EXT-X-MAP:.*URI="([^"]+)"/);
-    if (map) {
-      const name = `init-${files.length}.mp4`;
-      files.push({ name, url: absoluteUrl(map[1], playlistUrl) });
-      return line.replace(map[1], name);
-    }
-    if (!line || line.startsWith("#")) return line;
-    const url = absoluteUrl(line, playlistUrl);
-    const extension = new URL(url).pathname.match(/\.[a-z0-9]+$/i)?.[0] || ".ts";
-    const name = `segment-${files.length}${extension}`;
-    files.push({ name, url });
-    return name;
-  });
-  return { manifest: rewritten.join("\n"), files };
-}
-
 function downloadName(input: VidsrcDownloadRequest): string {
   const suffix = input.mediaType === "tv"
     ? ` S${String(input.season || 1).padStart(2, "0")}E${String(input.episode || 1).padStart(2, "0")}`
@@ -135,16 +102,9 @@ function downloadName(input: VidsrcDownloadRequest): string {
   return `${input.title}${suffix}`.replace(/[\\/:*?"<>|]/g, "").trim() || "video";
 }
 
-function isMobileDevice(): boolean {
-  if (typeof navigator === "undefined") return false;
-  const mobileUserAgent = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-  const iPadDesktopMode = /Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1;
-  return mobileUserAgent || iPadDesktopMode;
-}
-
-function parseMobileMediaParts(manifest: string, playlistUrl: string) {
-  const parts: MobileMediaPart[] = [];
-  let initPart: MobileMediaPart | null = null;
+function parseMediaParts(manifest: string, playlistUrl: string) {
+  const parts: MediaPart[] = [];
+  let initPart: MediaPart | null = null;
   let pendingRange: string | undefined;
   let previousRangeEnd = -1;
 
@@ -186,7 +146,7 @@ function parseMobileMediaParts(manifest: string, playlistUrl: string) {
   return { initPart, parts };
 }
 
-async function fetchMediaPart(part: MobileMediaPart, signal?: AbortSignal) {
+async function fetchMediaPart(part: MediaPart, signal?: AbortSignal) {
   const headers: HeadersInit = {};
   if (part.range) headers.Range = part.range;
   const response = await fetch(part.url, { signal, headers });
@@ -207,7 +167,7 @@ async function loadMuxJs(signal?: AbortSignal): Promise<MuxJs> {
     const script = existing || document.createElement("script");
     const abort = () => reject(new DOMException("Download canceled", "AbortError"));
     const loaded = () => resolve();
-    const failed = () => reject(new Error("Could not load the mobile MP4 converter."));
+    const failed = () => reject(new Error("Could not load the MP4 transmuxer."));
 
     script.addEventListener("load", loaded, { once: true });
     script.addEventListener("error", failed, { once: true });
@@ -221,7 +181,7 @@ async function loadMuxJs(signal?: AbortSignal): Promise<MuxJs> {
     }
   });
 
-  if (!window.muxjs) throw new Error("The mobile MP4 converter did not initialize.");
+  if (!window.muxjs) throw new Error("The MP4 transmuxer did not initialize.");
   return window.muxjs;
 }
 
@@ -251,15 +211,9 @@ function hasTransportStreamSync(bytes: Uint8Array) {
 }
 
 async function transmuxTsSegment(muxjs: MuxJs, bytes: Uint8Array) {
-  if (!hasTransportStreamSync(bytes)) {
-    throw new Error("The video part was not valid MPEG-TS data.");
-  }
+  if (!hasTransportStreamSync(bytes)) throw new Error("The video part was not valid MPEG-TS data.");
 
-  const transmuxer = new muxjs.mp4.Transmuxer({
-    keepOriginalTimestamps: true,
-    remux: true,
-  });
-
+  const transmuxer = new muxjs.mp4.Transmuxer({ keepOriginalTimestamps: true, remux: true });
   try {
     return await new Promise<MuxSegment[]>((resolve, reject) => {
       const output: MuxSegment[] = [];
@@ -276,7 +230,7 @@ async function transmuxTsSegment(muxjs: MuxJs, bytes: Uint8Array) {
         settled = true;
         cleanup();
         if (output.length > 0) resolve(output);
-        else reject(new Error("The mobile MP4 converter produced no output."));
+        else reject(new Error("The MP4 transmuxer produced no output."));
       };
       const onData = (segment?: MuxSegment) => {
         if (segment) output.push(segment);
@@ -285,12 +239,9 @@ async function transmuxTsSegment(muxjs: MuxJs, bytes: Uint8Array) {
 
       transmuxer.on("data", onData);
       transmuxer.on("done", onDone);
-
       try {
         transmuxer.push(bytes);
         transmuxer.flush();
-        // Give busy mobile browsers time to deliver mux.js events instead of treating
-        // a 0 ms scheduling delay as a failed conversion.
         fallbackTimer = window.setTimeout(finish, 250);
       } catch (error) {
         settled = true;
@@ -303,13 +254,13 @@ async function transmuxTsSegment(muxjs: MuxJs, bytes: Uint8Array) {
   }
 }
 
-async function downloadMobileMp4(
+async function downloadWithMux(
   streamUrl: string,
   input: VidsrcDownloadRequest,
   options: DownloadOptions,
   report: (update: ProgressUpdate) => void,
 ) {
-  report({ stage: "loading", message: "Preparing mobile MP4 download", progress: 0.06 });
+  report({ stage: "loading", message: "Preparing low-memory MP4 download", progress: 0.06 });
   const selected = await selectMediaPlaylist(streamUrl, options.signal);
   if (!selected.manifest.includes("#EXT-X-ENDLIST")) {
     throw new Error("This stream is live or unfinished, so it cannot be saved as an MP4.");
@@ -318,7 +269,7 @@ async function downloadMobileMp4(
     throw new Error("Encrypted HLS streams are not supported.");
   }
 
-  const { initPart, parts } = parseMobileMediaParts(selected.manifest, selected.url);
+  const { initPart, parts } = parseMediaParts(selected.manifest, selected.url);
   if (!parts.length) throw new Error("The HLS playlist contains no video parts.");
 
   const outputParts: BlobPart[] = [];
@@ -326,7 +277,6 @@ async function downloadMobileMp4(
   if (initPart) {
     const initBytes = await fetchMediaPart(initPart, options.signal);
     outputParts.push(new Blob([toBlobPart(initBytes)], { type: "video/mp4" }));
-
     for (let index = 0; index < parts.length; index += 1) {
       if (options.signal?.aborted) throw new DOMException("Download canceled", "AbortError");
       report({
@@ -355,8 +305,6 @@ async function downloadMobileMp4(
         fragments = await transmuxTsSegment(muxjs, tsBytes);
       } catch (firstError) {
         if (options.signal?.aborted) throw new DOMException("Download canceled", "AbortError");
-        // A transient CDN/body issue should not kill a multi-thousand-part download.
-        // Re-fetch once and retry with another fresh transmuxer.
         tsBytes = await fetchMediaPart(parts[index], options.signal);
         try {
           fragments = await transmuxTsSegment(muxjs, tsBytes);
@@ -378,7 +326,7 @@ async function downloadMobileMp4(
     }
 
     if (!wroteInitSegment || outputParts.length < 2) {
-      throw new Error("The mobile MP4 converter could not create a valid MP4.");
+      throw new Error("The MP4 transmuxer could not create a valid MP4.");
     }
   }
 
@@ -387,39 +335,43 @@ async function downloadMobileMp4(
   report({ stage: "saving", message: "Download started", progress: 1 });
 }
 
-export async function extractVidsrcStream(input: VidsrcDownloadRequest, signal?: AbortSignal) {
-  const url = new URL(`${getApiBase()}/extract`);
-  url.searchParams.set("tmdb_id", String(input.tmdbId));
-  url.searchParams.set("type", input.mediaType);
-  if (input.mediaType === "tv") {
-    url.searchParams.set("season", String(input.season || 1));
-    url.searchParams.set("episode", String(input.episode || 1));
-  }
-  const response = await fetch(url.toString(), { signal });
-  const payload = (await response.json().catch(() => null)) as ExtractResponse | null;
-  if (!response.ok || !payload) throw new Error(`Stream extraction failed (${response.status}).`);
-  const stream = findStream(payload);
-  if (!payload.success || !stream) {
-    const providerError = Object.values(payload.results || {}).find((item) => item?.error)?.error;
-    throw new Error(payload.error || providerError || "The API did not return a downloadable stream.");
-  }
-  return stream;
+function rewritePlaylist(manifest: string, playlistUrl: string) {
+  const files: PlaylistFile[] = [];
+  const rewritten = manifest.split(/\r?\n/).map((line) => {
+    const map = line.match(/^#EXT-X-MAP:.*URI="([^"]+)"/);
+    if (map) {
+      const name = `init-${files.length}.mp4`;
+      files.push({ name, url: absoluteUrl(map[1], playlistUrl) });
+      return line.replace(map[1], name);
+    }
+    if (!line || line.startsWith("#")) return line;
+    const url = absoluteUrl(line, playlistUrl);
+    const extension = new URL(url).pathname.match(/\.[a-z0-9]+$/i)?.[0] || ".ts";
+    const name = `segment-${files.length}${extension}`;
+    files.push({ name, url });
+    return name;
+  });
+  return { manifest: rewritten.join("\n"), files };
 }
 
-export async function downloadVidsrcMp4(input: VidsrcDownloadRequest, options: DownloadOptions = {}) {
-  const report = options.onProgress || (() => {});
+async function createClassWorkerUrl(signal?: AbortSignal): Promise<string> {
+  const source = await fetchText(`${FFMPEG_PACKAGE_BASE}/worker.js`, signal);
+  const sameOriginSource = source
+    .replace('from "./const.js"', `from "${FFMPEG_PACKAGE_BASE}/const.js"`)
+    .replace('from "./errors.js"', `from "${FFMPEG_PACKAGE_BASE}/errors.js"`);
+  return URL.createObjectURL(new Blob([sameOriginSource], { type: "text/javascript" }));
+}
+
+async function downloadWithFfmpeg(
+  streamUrl: string,
+  input: VidsrcDownloadRequest,
+  options: DownloadOptions,
+  report: (update: ProgressUpdate) => void,
+) {
   let ffmpeg: FFmpegInstance | null = null;
   let classWorkerUrl: string | null = null;
   try {
-    report({ stage: "extracting", message: "Finding the video stream", progress: 0.02 });
-    const streamUrl = await extractVidsrcStream(input, options.signal);
-
-    if (isMobileDevice()) {
-      await downloadMobileMp4(streamUrl, input, options, report);
-      return;
-    }
-
-    report({ stage: "loading", message: "Loading the MP4 converter", progress: 0.08 });
+    report({ stage: "loading", message: "Loading compatibility MP4 converter", progress: 0.08 });
     const dynamicImport = Function("url", "return import(url)") as (url: string) => Promise<any>;
     const [{ FFmpeg }, { toBlobURL }] = await Promise.all([
       dynamicImport(FFMPEG_PACKAGE_URL),
@@ -446,7 +398,7 @@ export async function downloadVidsrcMp4(input: VidsrcDownloadRequest, options: D
       const file = playlist.files[index];
       report({
         stage: "downloading",
-        message: `Downloading video part ${index + 1} of ${playlist.files.length}`,
+        message: `Compatibility download part ${index + 1} of ${playlist.files.length}`,
         progress: 0.12 + ((index + 1) / playlist.files.length) * 0.68,
       });
       const response = await fetch(file.url, { signal: options.signal });
@@ -464,17 +416,49 @@ export async function downloadVidsrcMp4(input: VidsrcDownloadRequest, options: D
     report({ stage: "saving", message: "Saving the MP4", progress: 0.98 });
     const output = await ffmpeg.readFile("output.mp4");
     if (typeof output === "string") throw new Error("The converter returned an invalid MP4 file.");
-    const objectUrl = URL.createObjectURL(new Blob([new Uint8Array(output)], { type: "video/mp4" }));
-    const link = document.createElement("a");
-    link.href = objectUrl;
-    link.download = `${downloadName(input)}.mp4`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    saveMp4Blob([new Blob([toBlobPart(output)], { type: "video/mp4" })], input);
     report({ stage: "saving", message: "Download started", progress: 1 });
   } finally {
     ffmpeg?.terminate();
     if (classWorkerUrl) URL.revokeObjectURL(classWorkerUrl);
+  }
+}
+
+export async function extractVidsrcStream(input: VidsrcDownloadRequest, signal?: AbortSignal) {
+  const url = new URL(`${getApiBase()}/extract`);
+  url.searchParams.set("tmdb_id", String(input.tmdbId));
+  url.searchParams.set("type", input.mediaType);
+  if (input.mediaType === "tv") {
+    url.searchParams.set("season", String(input.season || 1));
+    url.searchParams.set("episode", String(input.episode || 1));
+  }
+  const response = await fetch(url.toString(), { signal });
+  const payload = (await response.json().catch(() => null)) as ExtractResponse | null;
+  if (!response.ok || !payload) throw new Error(`Stream extraction failed (${response.status}).`);
+  const stream = findStream(payload);
+  if (!payload.success || !stream) {
+    const providerError = Object.values(payload.results || {}).find((item) => item?.error)?.error;
+    throw new Error(payload.error || providerError || "The API did not return a downloadable stream.");
+  }
+  return stream;
+}
+
+export async function downloadVidsrcMp4(input: VidsrcDownloadRequest, options: DownloadOptions = {}) {
+  const report = options.onProgress || (() => {});
+  report({ stage: "extracting", message: "Finding the video stream", progress: 0.02 });
+  const streamUrl = await extractVidsrcStream(input, options.signal);
+
+  try {
+    await downloadWithMux(streamUrl, input, options, report);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    if (options.signal?.aborted) throw new DOMException("Download canceled", "AbortError");
+
+    report({
+      stage: "loading",
+      message: "Low-memory converter failed; switching to compatibility mode",
+      progress: 0.05,
+    });
+    await downloadWithFfmpeg(streamUrl, input, options, report);
   }
 }
