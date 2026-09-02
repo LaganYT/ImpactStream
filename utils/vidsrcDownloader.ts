@@ -1,4 +1,5 @@
 const DEFAULT_API_BASE = "https://vidsrc-scraper-serverless.vercel.app";
+const DEFAULT_MOVIE_DOWNLOAD_API_BASE = "https://downloads.shegu.st/movie";
 const FFMPEG_PACKAGE_URL = "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/esm/index.js";
 const FFMPEG_PACKAGE_BASE = "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/esm";
 const FFMPEG_UTIL_URL = "https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.2/dist/esm/index.js";
@@ -31,6 +32,21 @@ export type VidsrcDownloadRequest = {
   season?: number;
   episode?: number;
 };
+
+export type MovieDownloadLink = {
+  source: string;
+  name: string;
+  quality: number;
+  url: string;
+  size: string;
+  provider: string;
+};
+
+type MovieDownloadResponse = {
+  links?: MovieDownloadLink[];
+  error?: string;
+};
+
 type DownloadOptions = {
   signal?: AbortSignal;
   onProgress?: (update: ProgressUpdate) => void;
@@ -41,11 +57,47 @@ function getApiBase(): string {
   return (process.env.NEXT_PUBLIC_VIDSRC_API_URL || DEFAULT_API_BASE).replace(/\/$/, "");
 }
 
+function getMovieDownloadApiBase(): string {
+  return (process.env.NEXT_PUBLIC_MOVIE_DOWNLOAD_API_URL || DEFAULT_MOVIE_DOWNLOAD_API_BASE).replace(/\/$/, "");
+}
+
 function findStream(payload: ExtractResponse): string | null {
   for (const result of Object.values(payload.results || {})) {
     if (typeof result?.hls_url === "string" && result.hls_url.length > 0) return result.hls_url;
   }
   return null;
+}
+
+function isValidMovieDownloadLink(value: unknown): value is MovieDownloadLink {
+  if (!value || typeof value !== "object") return false;
+  const link = value as Partial<MovieDownloadLink>;
+  return (
+    typeof link.source === "string" &&
+    typeof link.name === "string" &&
+    typeof link.quality === "number" &&
+    typeof link.url === "string" &&
+    link.url.length > 0 &&
+    typeof link.size === "string" &&
+    typeof link.provider === "string"
+  );
+}
+
+export async function fetchMovieDownloadLinks(tmdbId: number, signal?: AbortSignal): Promise<MovieDownloadLink[]> {
+  const response = await fetch(`${getMovieDownloadApiBase()}/${encodeURIComponent(String(tmdbId))}`, {
+    signal,
+    headers: { Accept: "application/json" },
+  });
+  const payload = (await response.json().catch(() => null)) as MovieDownloadResponse | null;
+  if (!response.ok || !payload) {
+    throw new Error(`Download lookup failed (${response.status}).`);
+  }
+
+  const links = Array.isArray(payload.links) ? payload.links.filter(isValidMovieDownloadLink) : [];
+  if (links.length === 0) {
+    throw new Error(payload.error || "No direct downloads are available for this movie.");
+  }
+
+  return links.sort((a, b) => b.quality - a.quality);
 }
 
 async function fetchText(url: string, signal?: AbortSignal): Promise<string> {
