@@ -144,7 +144,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "OPTIONS") {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Range, Accept");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Range, Accept, X-Csrf-Token");
     return res.status(204).end();
   }
 
@@ -155,7 +155,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const method = req.method || "GET";
   const headers = new Headers();
-  const forwardedHeaders = ["accept", "accept-language", "content-type", "range", "user-agent"];
+  const forwardedHeaders = [
+    "accept",
+    "accept-language",
+    "content-type",
+    "range",
+    "user-agent",
+    "x-csrf-token",
+    "x-requested-with",
+  ];
   for (const name of forwardedHeaders) {
     const value = req.headers[name];
     if (typeof value === "string") headers.set(name, value);
