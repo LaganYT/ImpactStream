@@ -10,25 +10,17 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@videojs/http-streaming": "^3.17.5",
     "@videojs/themes": "^1.0.1",
     "axios": "latest",
-    "crypto-js": "^4.2.0",
-    "hashids": "^2.3.0",
-    "hls.js": "^1.6.16",
     "next": "latest",
     "react": "latest",
     "react-dom": "latest",
     "react-icons": "latest",
-    "video.js": "^8.23.9",
-    "videojs-contrib-hls": "^5.15.0"
+    "video.js": "^8.23.9"
   },
   "devDependencies": {
-    "@types/crypto-js": "^4.2.2",
     "@types/node": "latest",
     "@types/react": "latest",
-    "eslint": "latest",
-    "eslint-config-next": "latest",
     "typescript": "latest"
   }
 }
