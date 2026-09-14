@@ -84,6 +84,19 @@ function resolveUrl(value: string, baseUrl: string) {
   }
 }
 
+function isPlaylistUrl(value: string) {
+  try {
+    return new URL(value).pathname.toLowerCase().endsWith(".m3u8");
+  } catch {
+    return false;
+  }
+}
+
+function rewriteMediaUrl(value: string, baseUrl: string, requestOrigin: string) {
+  const resolved = resolveUrl(value, baseUrl);
+  return isPlaylistUrl(resolved) ? getProxyUrl(resolved, requestOrigin) : resolved;
+}
+
 function rewritePlaylist(playlist: string, baseUrl: string, requestOrigin: string) {
   return playlist
     .split(/\r?\n/)
@@ -93,11 +106,11 @@ function rewritePlaylist(playlist: string, baseUrl: string, requestOrigin: strin
 
       if (trimmed.startsWith("#")) {
         return line.replace(/URI="([^"]+)"/g, (_match, uri: string) => {
-          return `URI="${getProxyUrl(resolveUrl(uri, baseUrl), requestOrigin)}"`;
+          return `URI="${rewriteMediaUrl(uri, baseUrl, requestOrigin)}"`;
         });
       }
 
-      return getProxyUrl(resolveUrl(trimmed, baseUrl), requestOrigin);
+      return rewriteMediaUrl(trimmed, baseUrl, requestOrigin);
     })
     .join("\n");
 }
