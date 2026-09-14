@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
-import videojs from 'video.js';
-import 'video.js/dist/video-js.css';
-import '@videojs/themes/dist/forest/index.css';
-import { FaPlay, FaPause, FaVolumeUp, FaVolumeMute, FaExpand, FaCompress } from 'react-icons/fa';
+import { useEffect, useRef, useState } from "react";
+import videojs from "video.js";
+import "video.js/dist/video-js.css";
+import "@videojs/themes/dist/forest/index.css";
 
 interface VideoJSPlayerProps {
   src: string;
@@ -23,151 +22,81 @@ const VideoJSPlayer: React.FC<VideoJSPlayerProps> = ({
   onPlay,
   onPause,
   onError,
-  onReady
+  onReady,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<any>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(muted);
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
     if (!videoRef.current) return;
 
-    const videoElement = videoRef.current;
-    
-    // Initialize Video.js player
-    const player = videojs(videoElement, {
-      controls: true,
-      fluid: true,
-      responsive: true,
-      autoplay: autoPlay,
-      muted: muted,
-      liveui: true,
-      liveTracker: {
-        trackingThreshold: 0,
-        liveTolerance: 15
+    const player = videojs(
+      videoRef.current,
+      {
+        controls: true,
+        fluid: true,
+        responsive: true,
+        autoplay: autoPlay,
+        muted,
+        liveui: true,
+        liveTracker: {
+          trackingThreshold: 0,
+          liveTolerance: 15,
+        },
+        html5: {
+          hls: {
+            enableLowInitialPlaylist: true,
+            smoothQualityChange: true,
+            overrideNative: true,
+          },
+        },
+        sources: [
+          {
+            src,
+            type: "application/x-mpegURL",
+          },
+        ],
       },
-      html5: {
-        hls: {
-          enableLowInitialPlaylist: true,
-          smoothQualityChange: true,
-          overrideNative: true
-        }
-      },
-      sources: [{
-        src: src,
-        type: 'application/x-mpegURL'
-      }]
-    }, () => {
-      playerRef.current = player;
-      setIsLoading(false);
-      onReady?.();
-
-      // Add event listeners
-      player.on('play', () => {
-        setIsPlaying(true);
-        onPlay?.();
-      });
-
-      player.on('pause', () => {
-        setIsPlaying(false);
-        onPause?.();
-      });
-
-      player.on('error', (error: any) => {
-        setHasError(true);
+      () => {
+        playerRef.current = player;
         setIsLoading(false);
-        const errorMsg = error?.message || 'Failed to load stream';
-        setErrorMessage(errorMsg);
-        onError?.(errorMsg);
-      });
+        onReady?.();
 
-      player.on('loadeddata', () => {
-        setIsLoading(false);
-      });
-
-      // Custom controls
-      const controlBar = player.getChild('ControlBar');
-      if (controlBar) {
-        // Add custom fullscreen button
-        const fullscreenButton = controlBar.addChild('Button', {
-          text: 'Fullscreen',
-          className: 'vjs-fullscreen-button'
+        player.on("play", () => onPlay?.());
+        player.on("pause", () => onPause?.());
+        player.on("error", (error: any) => {
+          setHasError(true);
+          setIsLoading(false);
+          const message = error?.message || "Failed to load stream";
+          setErrorMessage(message);
+          onError?.(message);
         });
-
-        fullscreenButton.on('click', () => {
-          if (player.isFullscreen()) {
-            player.exitFullscreen();
-            setIsFullscreen(false);
-          } else {
-            player.requestFullscreen();
-            setIsFullscreen(true);
-          }
-        });
+        player.on("loadeddata", () => setIsLoading(false));
       }
-    });
+    );
 
     return () => {
-      if (playerRef.current) {
-        playerRef.current.dispose();
-        playerRef.current = null;
-      }
+      player.dispose();
+      playerRef.current = null;
     };
   }, [src, autoPlay, muted, onPlay, onPause, onError, onReady]);
 
-  const handlePlayPause = () => {
-    if (playerRef.current) {
-      if (isPlaying) {
-        playerRef.current.pause();
-      } else {
-        playerRef.current.play();
-      }
-    }
-  };
-
-  const handleMute = () => {
-    if (playerRef.current) {
-      const newMutedState = !isMuted;
-      playerRef.current.muted(newMutedState);
-      setIsMuted(newMutedState);
-    }
-  };
-
-  const handleFullscreen = () => {
-    if (playerRef.current) {
-      if (isFullscreen) {
-        playerRef.current.exitFullscreen();
-        setIsFullscreen(false);
-      } else {
-        playerRef.current.requestFullscreen();
-        setIsFullscreen(true);
-      }
-    }
-  };
-
   const handleRetry = () => {
     setHasError(false);
-    setErrorMessage('');
+    setErrorMessage("");
     setIsLoading(true);
-    
+
     if (playerRef.current) {
       playerRef.current.src({
-        src: src,
-        type: 'application/x-mpegURL'
+        src,
+        type: "application/x-mpegURL",
       });
       playerRef.current.load();
-      playerRef.current.play().catch(() => {
-        // Handle play error
-      });
+      playerRef.current.play().catch(() => {});
     }
-  };
-
-  const handleOpenInNewTab = () => {
-    window.open(src, '_blank');
   };
 
   return (
@@ -187,7 +116,7 @@ const VideoJSPlayer: React.FC<VideoJSPlayerProps> = ({
 
       {isLoading && (
         <div className="videojs-loading">
-          <div className="loading-spinner"></div>
+          <div className="loading-spinner" />
           <p>Loading {channelName}...</p>
           <p className="loading-note">This may take a few moments for live streams</p>
         </div>
@@ -201,12 +130,17 @@ const VideoJSPlayer: React.FC<VideoJSPlayerProps> = ({
             <button onClick={handleRetry} className="retry-button">
               Retry Stream
             </button>
-            <button onClick={handleOpenInNewTab} className="open-tab-button">
+            <button
+              onClick={() => window.open(src, "_blank")}
+              className="open-tab-button"
+            >
               Open in New Tab
             </button>
           </div>
           <div className="error-help">
-            <p><strong>If the stream doesn't work:</strong></p>
+            <p>
+              <strong>If the stream doesn't work:</strong>
+            </p>
             <ul>
               <li>Try refreshing the page</li>
               <li>Check your internet connection</li>
