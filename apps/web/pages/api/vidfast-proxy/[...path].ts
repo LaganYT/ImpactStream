@@ -82,30 +82,11 @@ function rewriteHtml(html: string) {
       }catch(_){return value;}
     }
 
-    try {
-      var frame=window.frameElement;
-      if(frame){
-        try{Object.defineProperty(frame,'sandbox',{configurable:true,get:function(){return undefined;}});}catch(_){}
-        try{
-          var hasAttribute=frame.hasAttribute.bind(frame);
-          frame.hasAttribute=function(name){return String(name).toLowerCase()==='sandbox'?false:hasAttribute(name);};
-        }catch(_){}
-        try{
-          var getAttribute=frame.getAttribute.bind(frame);
-          frame.getAttribute=function(name){return String(name).toLowerCase()==='sandbox'?null:getAttribute(name);};
-        }catch(_){}
-        try{
-          var removeAttribute=frame.removeAttribute.bind(frame);
-          frame.removeAttribute=function(name){if(String(name).toLowerCase()==='sandbox')return;return removeAttribute(name);};
-        }catch(_){}
-        try{
-          var setAttribute=frame.setAttribute.bind(frame);
-          frame.setAttribute=function(name,value){if(String(name).toLowerCase()==='sandbox')return;return setAttribute(name,value);};
-        }catch(_){}
-      }
-    }catch(_){}
-
-    try{Object.defineProperty(window,'open',{value:function(){return null;},writable:false,configurable:false});}catch(_){window.open=function(){return null;};}
+    try{
+      Object.defineProperty(window,'open',{value:function(){return null;},writable:false,configurable:false});
+    }catch(_){
+      window.open=function(){return null;};
+    }
 
     var nativeFetch=window.fetch;
     if(nativeFetch){
@@ -127,7 +108,7 @@ function rewriteHtml(html: string) {
       return nativeOpen.apply(this,arguments);
     };
 
-    document.addEventListener('click',function(event){
+    function blockExternalNavigation(event){
       var element=event.target instanceof Element?event.target.closest('a'):null;
       if(!element)return;
       var href=element.getAttribute('href');
@@ -142,13 +123,26 @@ function rewriteHtml(html: string) {
         element.href=proxify(url.href);
         element.removeAttribute('target');
       }catch(_){}
-    },true);
+    }
+
+    document.addEventListener('click',blockExternalNavigation,true);
+    document.addEventListener('auxclick',blockExternalNavigation,true);
 
     document.addEventListener('submit',function(event){
       var form=event.target;
       if(!(form instanceof HTMLFormElement))return;
       var action=form.getAttribute('action');
-      if(action)form.action=proxify(action);
+      if(action){
+        try{
+          var url=new URL(action,upstream);
+          if(url.origin!==upstream){
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            return;
+          }
+          form.action=proxify(url.href);
+        }catch(_){}
+      }
       form.removeAttribute('target');
     },true);
   })();</script>`;
@@ -181,14 +175,7 @@ function rewriteCss(css: string) {
 function rewriteJavaScript(source: string) {
   return source
     .replace(/(["'`])\/_next\//g, `$1${PROXY_PREFIX}/_next/`)
-    .replace(/https:\/\/vidfast\.vc\/_next\//g, `${PROXY_PREFIX}/_next/`)
-    .replace(
-      /document\[[^\]]+\]\.innerHTML='<div style="display:flex;justify-content:center;align-items:center;height:100vh"><h1>Please Disable Sandbox<\/h1><\/div>'/g,
-      "void 0"
-    )
-    .replace(/\.hasAttribute\("sandbox"\)/g, '.hasAttribute("__impactstream_sandbox__")')
-    .replace(/document\[[^\]]+\]=document\.domain/g, "void 0")
-    .replace(/document\.domain\s*=\s*document\.domain/g, "void 0");
+    .replace(/https:\/\/vidfast\.vc\/_next\//g, `${PROXY_PREFIX}/_next/`);
 }
 
 function copyResponseHeaders(upstream: Response, res: NextApiResponse) {
