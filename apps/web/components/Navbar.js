@@ -1,49 +1,48 @@
 import { useEffect, useState } from "react";
-import { useRouter } from "next/router";
 import Link from "next/link";
-import { FaGithub, FaTv, FaHome, FaSearch, FaBars, FaTimes } from "react-icons/fa";
+import { useRouter } from "next/router";
+import { FaBars, FaGithub, FaHome, FaSearch, FaTimes, FaTv } from "react-icons/fa";
 
 const NAV_ITEMS = [
   { href: "/", label: "Home", icon: FaHome },
   { href: "/live-tv", label: "Live TV", icon: FaTv },
 ];
 
-export default function Navbar({ query, setQuery }) {
+export default function Navbar({ searchTerm, setSearchTerm }) {
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
 
   useEffect(() => {
-    const handleScroll = () => setIsScrolled(window.scrollY > 24);
-    handleScroll();
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
+    const updateScrollState = () => setIsScrolled(window.scrollY > 24);
+    updateScrollState();
+    window.addEventListener("scroll", updateScrollState, { passive: true });
+    return () => window.removeEventListener("scroll", updateScrollState);
   }, []);
 
-  const handleSearch = () => {
-    if (query.trim()) {
-      router.push(`/?query=${encodeURIComponent(query)}`);
-    }
+  const submitSearch = () => {
+    const normalizedSearchTerm = searchTerm.trim();
+    if (!normalizedSearchTerm) return;
+
+    router.push(`/?query=${encodeURIComponent(normalizedSearchTerm)}`);
   };
 
-  const toggleMobileMenu = () => {
-    setIsMobileMenuOpen(!isMobileMenuOpen);
-  };
-
-  const isActive = (href) =>
+  const isActiveRoute = (href) =>
     href === "/" ? router.pathname === "/" : router.pathname.startsWith(href);
 
   return (
     <nav className={`navbar ${isScrolled || isMobileMenuOpen ? "navbar-solid" : ""}`}>
       <div className="navbar-left">
-        <Link href="/"><h1 className="logo">ImpactStream</h1></Link>
+        <Link href="/">
+          <h1 className="logo">ImpactStream</h1>
+        </Link>
 
         <div className="nav-links desktop-nav">
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => (
             <Link
               key={href}
               href={href}
-              className={`nav-link ${isActive(href) ? "nav-link-active" : ""}`}
+              className={`nav-link ${isActiveRoute(href) ? "nav-link-active" : ""}`}
             >
               <Icon /> {label}
             </Link>
@@ -56,14 +55,14 @@ export default function Navbar({ query, setQuery }) {
           <input
             type="text"
             placeholder="Titles, people, genres..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleSearch();
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") submitSearch();
             }}
             aria-label="Search movies, shows, or anime"
           />
-          <button onClick={handleSearch} aria-label="Search">
+          <button onClick={submitSearch} aria-label="Search">
             <FaSearch />
           </button>
         </div>
@@ -80,13 +79,9 @@ export default function Navbar({ query, setQuery }) {
 
         <button
           className="mobile-menu-button"
-          onClick={toggleMobileMenu}
+          onClick={() => setIsMobileMenuOpen((open) => !open)}
           aria-label="Toggle mobile menu"
-          style={{
-            display: "none",
-            minWidth: "44px",
-            minHeight: "44px",
-          }}
+          style={{ display: "none", minWidth: "44px", minHeight: "44px" }}
         >
           {isMobileMenuOpen ? <FaTimes size={24} /> : <FaBars size={24} />}
         </button>
@@ -110,18 +105,18 @@ export default function Navbar({ query, setQuery }) {
           <input
             type="text"
             placeholder="Search movies, shows, or anime..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                handleSearch();
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                submitSearch();
                 setIsMobileMenuOpen(false);
               }
             }}
           />
           <button
             onClick={() => {
-              handleSearch();
+              submitSearch();
               setIsMobileMenuOpen(false);
             }}
           >
