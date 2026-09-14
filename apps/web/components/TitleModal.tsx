@@ -11,10 +11,10 @@ import {
   useState,
 } from "react";
 import { FaDownload, FaPlay, FaStar, FaTimes, FaVolumeMute, FaVolumeUp } from "react-icons/fa";
+import DownloadDialog from "./DownloadDialog";
 import EpisodeList, { EpisodeInfo } from "./EpisodeList";
 import { getMediaType, isAnimeItem, RoutableMediaItem } from "../utils/mediaRouting";
-import DownloadConverter from "./DownloadConverter";
-import type { VidsrcDownloadRequest } from "../utils/vidsrcDownloader";
+import type { MediaDownloadRequest } from "../utils/sheguDownloader";
 
 export type TitleRef = {
   id: number;
@@ -66,9 +66,7 @@ type TitleDetails = {
   number_of_seasons?: number;
   number_of_episodes?: number;
   original_language?: string;
-  imdb_id?: string;
   genres?: { id: number; name: string }[];
-  external_ids?: { imdb_id?: string };
   credits?: { cast?: { name: string }[] };
   recommendations?: { results?: RecommendationItem[] };
   videos?: { results?: VideoItem[] };
@@ -76,20 +74,21 @@ type TitleDetails = {
 
 function formatRuntime(minutes?: number): string | null {
   if (!minutes || minutes <= 0) return null;
+
   const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  if (hours === 0) return `${mins}m`;
-  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+  const remainingMinutes = minutes % 60;
+  if (hours === 0) return `${remainingMinutes}m`;
+  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
 }
 
 function TitleModal({
   titleRef,
   onClose,
-  onSwap,
+  onSelectTitle,
 }: {
   titleRef: TitleRef;
   onClose: () => void;
-  onSwap: (ref: TitleRef) => void;
+  onSelectTitle: (ref: TitleRef) => void;
 }) {
   const router = useRouter();
   const trailerFrameRef = useRef<HTMLIFrameElement>(null);
@@ -98,7 +97,7 @@ function TitleModal({
   const [episodes, setEpisodes] = useState<EpisodeInfo[]>([]);
   const [isTrailerMuted, setIsTrailerMuted] = useState(true);
   const [downloadingEpisode, setDownloadingEpisode] = useState<number | null>(null);
-  const [downloadRequest, setDownloadRequest] = useState<VidsrcDownloadRequest | null>(null);
+  const [downloadRequest, setDownloadRequest] = useState<MediaDownloadRequest | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -116,7 +115,7 @@ function TitleModal({
           {
             params: {
               api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY,
-              append_to_response: "credits,recommendations,videos,external_ids",
+              append_to_response: "credits,recommendations,videos",
             },
           }
         );
@@ -134,8 +133,8 @@ function TitleModal({
 
   useEffect(() => {
     if (titleRef.mediaType !== "tv") return;
-    let cancelled = false;
 
+    let cancelled = false;
     const fetchSeason = async () => {
       try {
         const { data } = await axios.get(
@@ -176,24 +175,25 @@ function TitleModal({
         (details?.original_language === "ja" || titleRef.mediaType === "tv")
     );
 
-  const watchRoute = (extra?: Record<string, string>) => {
+  const getWatchRoute = (query?: Record<string, string>) => {
     if (isAnime) {
       return {
         pathname: `/anime/${titleRef.id}`,
-        query: { type: titleRef.mediaType, ...(extra || {}) },
+        query: { type: titleRef.mediaType, ...(query || {}) },
       };
     }
-    return { pathname: `/${titleRef.mediaType}/${titleRef.id}`, query: extra };
+
+    return { pathname: `/${titleRef.mediaType}/${titleRef.id}`, query };
   };
 
   const handlePlay = () => {
     onClose();
-    router.push(watchRoute());
+    router.push(getWatchRoute());
   };
 
   const handleEpisodeSelect = (episode: number) => {
     onClose();
-    router.push(watchRoute({ season: String(seasonNumber), episode: String(episode) }));
+    router.push(getWatchRoute({ season: String(seasonNumber), episode: String(episode) }));
   };
 
   const title = details?.title || details?.name || "";
@@ -202,40 +202,46 @@ function TitleModal({
   const backdropUrl = details?.backdrop_path
     ? `https://image.tmdb.org/t/p/w1280${details.backdrop_path}`
     : details?.poster_path
-    ? `https://image.tmdb.org/t/p/w780${details.poster_path}`
-    : null;
+      ? `https://image.tmdb.org/t/p/w780${details.poster_path}`
+      : null;
 
   const trailerKey = useMemo(() => {
     const videos = (details?.videos?.results || []).filter(
       (video) => video.site === "YouTube" && video.key
     );
-    const pick =
+    const trailer =
       videos.find((video) => video.type === "Trailer" && video.official) ||
       videos.find((video) => video.type === "Trailer") ||
       videos.find((video) => video.type === "Teaser");
-    return pick?.key || null;
+    return trailer?.key || null;
   }, [details?.videos]);
 
   const toggleTrailerMute = () => {
     const frame = trailerFrameRef.current;
     if (!frame?.contentWindow) return;
-    const func = isTrailerMuted ? "unMute" : "mute";
+
+    const command = isTrailerMuted ? "unMute" : "mute";
     frame.contentWindow.postMessage(
-      JSON.stringify({ event: "command", func, args: [] }),
+      JSON.stringify({ event: "command", func: command, args: [] }),
       "*"
     );
     setIsTrailerMuted(!isTrailerMuted);
   };
 
-  const handleDownload = (episode?: number) => {
-    const marker = titleRef.mediaType === "movie" ? 0 : episode || 1;
-    setDownloadingEpisode(marker);
-    setDownloadRequest({ tmdbId: titleRef.id, mediaType: titleRef.mediaType, title: title || "video", season: seasonNumber, episode });
+  const openDownloadDialog = (episode?: number) => {
+    const downloadMarker = titleRef.mediaType === "movie" ? 0 : episode || 1;
+    setDownloadingEpisode(downloadMarker);
+    setDownloadRequest({
+      tmdbId: titleRef.id,
+      mediaType: titleRef.mediaType,
+      title: title || "video",
+      season: seasonNumber,
+      episode,
+    });
   };
 
   const cast = (details?.credits?.cast || []).slice(0, 5).map((person) => person.name);
   const genres = (details?.genres || []).slice(0, 5).map((genre) => genre.name);
-
   const recommendations = useMemo(
     () =>
       (details?.recommendations?.results || [])
@@ -292,7 +298,7 @@ function TitleModal({
                 {details && titleRef.mediaType === "movie" ? (
                   <button
                     className="btn-more-info"
-                    onClick={() => handleDownload()}
+                    onClick={() => openDownloadDialog()}
                     disabled={downloadingEpisode === 0}
                   >
                     <FaDownload />
@@ -359,7 +365,7 @@ function TitleModal({
                     season={seasonNumber}
                     onSeasonChange={setSeasonNumber}
                     onEpisodeSelect={handleEpisodeSelect}
-                    onEpisodeDownload={(episode) => handleDownload(episode)}
+                    onEpisodeDownload={openDownloadDialog}
                     downloadingEpisode={downloadingEpisode || undefined}
                   />
                 ) : null}
@@ -369,28 +375,29 @@ function TitleModal({
                     <h3>More Like This</h3>
                     <div className="tm-recs-grid">
                       {recommendations.map((item) => {
-                        const recTitle = item.title || item.name || "Untitled";
-                        const recYear = (item.release_date || item.first_air_date || "").slice(0, 4);
+                        const recommendationTitle = item.title || item.name || "Untitled";
+                        const recommendationYear = (item.release_date || item.first_air_date || "").slice(0, 4);
                         const imageUrl = item.backdrop_path
                           ? `https://image.tmdb.org/t/p/w500${item.backdrop_path}`
                           : `https://image.tmdb.org/t/p/w500${item.poster_path}`;
+
                         return (
                           <div
                             key={item.id}
                             className="tm-rec-card"
                             onClick={() =>
-                              onSwap({
+                              onSelectTitle({
                                 id: item.id,
                                 mediaType: getMediaType(item),
                                 isAnime: isAnimeItem(item),
                               })
                             }
                           >
-                            <img src={imageUrl} alt={recTitle} loading="lazy" />
+                            <img src={imageUrl} alt={recommendationTitle} loading="lazy" />
                             <div className="tm-rec-body">
                               <div className="tm-rec-title-row">
-                                <h4>{recTitle}</h4>
-                                {recYear ? <span>{recYear}</span> : null}
+                                <h4>{recommendationTitle}</h4>
+                                {recommendationYear ? <span>{recommendationYear}</span> : null}
                               </div>
                               {item.overview ? <p>{item.overview}</p> : null}
                             </div>
@@ -407,12 +414,14 @@ function TitleModal({
       </div>
 
       {downloadRequest ? (
-        <DownloadConverter request={downloadRequest} onClose={() => {
-          setDownloadRequest(null);
-          setDownloadingEpisode(null);
-        }} />
+        <DownloadDialog
+          request={downloadRequest}
+          onClose={() => {
+            setDownloadRequest(null);
+            setDownloadingEpisode(null);
+          }}
+        />
       ) : null}
-
     </>
   );
 }
@@ -422,14 +431,13 @@ export function TitleModalProvider({ children }: { children: ReactNode }) {
 
   const openTitle = useCallback((ref: TitleRef) => setTitleRef(ref), []);
   const closeTitle = useCallback(() => setTitleRef(null), []);
-
-  const value = useMemo(() => ({ openTitle, closeTitle }), [openTitle, closeTitle]);
+  const contextValue = useMemo(() => ({ openTitle, closeTitle }), [openTitle, closeTitle]);
 
   return (
-    <TitleModalContext.Provider value={value}>
+    <TitleModalContext.Provider value={contextValue}>
       {children}
       {titleRef ? (
-        <TitleModal titleRef={titleRef} onClose={closeTitle} onSwap={openTitle} />
+        <TitleModal titleRef={titleRef} onClose={closeTitle} onSelectTitle={openTitle} />
       ) : null}
     </TitleModalContext.Provider>
   );
