@@ -1,132 +1,121 @@
-import { useRouter } from "next/router";
-import type { GetServerSideProps } from "next";
 import axios from "axios";
+import type { GetServerSideProps } from "next";
+import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import MediaDetailShell from "../../components/MediaDetailShell";
 import {
   buildVidfastTvUrl,
   getVidfastMediaEntry,
-  logVidfastPlayerEvent,
   parseVidfastMessageData,
   toContinueProgress,
   VIDFAST_ORIGIN,
 } from "../../utils/vidfast";
 
-type TVDetails = {
+type TvDetails = {
   name?: string;
-  overview?: string;
   poster_path?: string;
-  backdrop_path?: string;
-  vote_average?: number;
-  first_air_date?: string;
-  number_of_seasons?: number;
-  number_of_episodes?: number;
-  genres?: { id: number; name: string }[];
+};
+
+type StoredTvProgress = {
+  seasonNumber?: number;
+  episodeNumber?: number;
+  timestamp?: number;
+  duration?: number;
+  progress?: number;
+  updatedAt?: string;
+  title?: string;
+  posterPath?: string;
+  mediaType?: string;
+  tmdbId?: string;
 };
 
 export const getServerSideProps: GetServerSideProps = async () => ({ props: {} });
 
-function shouldTrackContinueWatching(input: {
-  seasonNumber?: number;
-  episodeNumber?: number;
-  timestamp?: number;
-  progress?: number;
-}) {
-  const season = Number(input.seasonNumber || 1);
-  const episode = Number(input.episodeNumber || 1);
-  const timestamp = Math.max(0, Number(input.timestamp || 0));
-  const progress = Math.max(0, Number(input.progress || 0));
+function shouldTrackContinueWatching(progress: StoredTvProgress) {
+  const seasonNumber = Number(progress.seasonNumber || 1);
+  const episodeNumber = Number(progress.episodeNumber || 1);
+  const timestamp = Math.max(0, Number(progress.timestamp || 0));
+  const percentComplete = Math.max(0, Number(progress.progress || 0));
 
-  return timestamp > 0 || progress > 0 || season !== 1 || episode !== 1;
+  return (
+    timestamp > 0 ||
+    percentComplete > 0 ||
+    seasonNumber !== 1 ||
+    episodeNumber !== 1
+  );
 }
 
-export default function TVDetailsPage() {
+export default function TvDetailsPage() {
   const router = useRouter();
   const { id } = router.query;
-  const [tvShow, setTVShow] = useState<TVDetails | null>(null);
+  const [show, setShow] = useState<TvDetails | null>(null);
   const [seasonNumber, setSeasonNumber] = useState(1);
   const [episodeNumber, setEpisodeNumber] = useState(1);
-  const [episodesCount, setEpisodesCount] = useState(0);
+  const [episodeCount, setEpisodeCount] = useState(0);
   const [resumeSeconds, setResumeSeconds] = useState(0);
   const [isProgressLoaded, setIsProgressLoaded] = useState(false);
 
   useEffect(() => {
     if (!id) return;
 
-    const fetchTVShow = async () => {
+    const fetchShow = async () => {
       const { data } = await axios.get(`https://api.themoviedb.org/3/tv/${id}`, {
         params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY },
       });
-      setTVShow(data);
+      setShow(data);
     };
 
-    fetchTVShow();
+    fetchShow();
   }, [id]);
 
   useEffect(() => {
-    if (!id || !tvShow) return;
+    if (!id || !show) return;
 
-    const storageId = Array.isArray(id) ? id[0] : id;
-    const storageKey = `continue:tv:${storageId}`;
+    const mediaId = Array.isArray(id) ? id[0] : id;
+    const storageKey = `continue:tv:${mediaId}`;
     const indexKey = "continueWatching:index";
 
     try {
-      const existing = window.localStorage.getItem(storageKey);
-      const parsed = existing ? JSON.parse(existing) : {};
-      const indexRaw = window.localStorage.getItem(indexKey);
-      const index: string[] = indexRaw ? JSON.parse(indexRaw) : [];
-      const entry = `tv:${storageId}`;
-      const nextData = {
-        ...parsed,
-        title: tvShow.name || parsed.title,
-        posterPath: tvShow.poster_path || parsed.posterPath,
+      const storedEntry = window.localStorage.getItem(storageKey);
+      const storedData: StoredTvProgress = storedEntry ? JSON.parse(storedEntry) : {};
+      const nextData: StoredTvProgress = {
+        ...storedData,
+        title: show.name || storedData.title,
+        posterPath: show.poster_path || storedData.posterPath,
         mediaType: "tv",
-        tmdbId: storageId,
-        updatedAt: parsed.updatedAt || new Date().toISOString(),
+        tmdbId: mediaId,
+        updatedAt: storedData.updatedAt || new Date().toISOString(),
       };
 
       window.localStorage.setItem(storageKey, JSON.stringify(nextData));
 
-      const filtered = index.filter((e) => e !== entry);
-      if (shouldTrackContinueWatching(nextData)) {
-        filtered.unshift(entry);
-      }
-      window.localStorage.setItem(indexKey, JSON.stringify(filtered.slice(0, 50)));
-    } catch {
-      // Ignore storage errors.
-    }
-  }, [id, tvShow]);
+      const storedIndex = window.localStorage.getItem(indexKey);
+      const indexEntries: string[] = storedIndex ? JSON.parse(storedIndex) : [];
+      const indexEntry = `tv:${mediaId}`;
+      const updatedIndex = indexEntries.filter((entry) => entry !== indexEntry);
+      if (shouldTrackContinueWatching(nextData)) updatedIndex.unshift(indexEntry);
+      window.localStorage.setItem(indexKey, JSON.stringify(updatedIndex.slice(0, 50)));
+    } catch {}
+  }, [id, show]);
 
   useEffect(() => {
     if (!id) return;
 
-    const storageId = Array.isArray(id) ? id[0] : id;
-    const storageKey = `continue:tv:${storageId}`;
+    const mediaId = Array.isArray(id) ? id[0] : id;
+    const storageKey = `continue:tv:${mediaId}`;
 
     try {
-      const stored = window.localStorage.getItem(storageKey);
-      const parsed = stored
-        ? (JSON.parse(stored) as {
-            seasonNumber?: number;
-            episodeNumber?: number;
-            timestamp?: number;
-          })
-        : {};
-      const savedSeason = Number(parsed?.seasonNumber);
-      const savedEpisode = Number(parsed?.episodeNumber);
-      const savedTimestamp = Math.floor(Number(parsed?.timestamp || 0));
+      const storedEntry = window.localStorage.getItem(storageKey);
+      const storedData: StoredTvProgress = storedEntry ? JSON.parse(storedEntry) : {};
+      const savedSeason = Number(storedData.seasonNumber);
+      const savedEpisode = Number(storedData.episodeNumber);
+      const savedTimestamp = Math.floor(Number(storedData.timestamp || 0));
 
-      if (Number.isFinite(savedSeason) && savedSeason > 0) {
-        setSeasonNumber(savedSeason);
-      }
-
-      if (Number.isFinite(savedEpisode) && savedEpisode > 0) {
-        setEpisodeNumber(savedEpisode);
-      }
-
+      if (Number.isFinite(savedSeason) && savedSeason > 0) setSeasonNumber(savedSeason);
+      if (Number.isFinite(savedEpisode) && savedEpisode > 0) setEpisodeNumber(savedEpisode);
       setResumeSeconds(savedTimestamp > 0 ? savedTimestamp : 0);
     } catch {
-      // Ignore invalid localStorage data.
+      setResumeSeconds(0);
     } finally {
       const querySeason = Number(
         Array.isArray(router.query.season) ? router.query.season[0] : router.query.season
@@ -138,169 +127,155 @@ export default function TVDetailsPage() {
       if (Number.isFinite(queryEpisode) && queryEpisode > 0) setEpisodeNumber(queryEpisode);
       setIsProgressLoaded(true);
     }
-  }, [id]);
+  }, [id, router.query.episode, router.query.season]);
 
   useEffect(() => {
-    if (!tvShow || !id || !isProgressLoaded) return;
+    if (!show || !id || !isProgressLoaded) return;
 
     const fetchSeason = async () => {
       try {
-        const { data } = await axios.get(`https://api.themoviedb.org/3/tv/${id}/season/${seasonNumber}`, {
-          params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY },
-        });
-        const count = Array.isArray(data.episodes) ? data.episodes.length : 0;
-        setEpisodesCount(count);
-        setEpisodeNumber((current) => {
-          if (count === 0) return 0;
-          if (current > count) return 1;
-          return current > 0 ? current : 1;
+        const { data } = await axios.get(
+          `https://api.themoviedb.org/3/tv/${id}/season/${seasonNumber}`,
+          { params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY } }
+        );
+        const nextEpisodeCount = Array.isArray(data.episodes) ? data.episodes.length : 0;
+        setEpisodeCount(nextEpisodeCount);
+        setEpisodeNumber((currentEpisode) => {
+          if (nextEpisodeCount === 0) return 0;
+          if (currentEpisode > nextEpisodeCount) return 1;
+          return currentEpisode > 0 ? currentEpisode : 1;
         });
       } catch {
-        setEpisodesCount(0);
+        setEpisodeCount(0);
         setEpisodeNumber(0);
       }
     };
 
     fetchSeason();
-  }, [tvShow, id, seasonNumber, isProgressLoaded]);
+  }, [show, id, seasonNumber, isProgressLoaded]);
 
   useEffect(() => {
     if (!id || !isProgressLoaded || seasonNumber <= 0 || episodeNumber <= 0) return;
 
-    const storageId = Array.isArray(id) ? id[0] : id;
-    const storageKey = `continue:tv:${storageId}`;
+    const mediaId = Array.isArray(id) ? id[0] : id;
+    const storageKey = `continue:tv:${mediaId}`;
     const indexKey = "continueWatching:index";
-    const entry = `tv:${storageId}`;
+    const indexEntry = `tv:${mediaId}`;
 
     try {
-      const existing = window.localStorage.getItem(storageKey);
-      const parsed = existing ? JSON.parse(existing) : {};
-      const nextData = {
-        ...parsed,
+      const storedEntry = window.localStorage.getItem(storageKey);
+      const storedData: StoredTvProgress = storedEntry ? JSON.parse(storedEntry) : {};
+      const sameEpisode =
+        Number(storedData.seasonNumber) === seasonNumber &&
+        Number(storedData.episodeNumber) === episodeNumber;
+      const nextData: StoredTvProgress = {
+        ...storedData,
         seasonNumber,
         episodeNumber,
-        timestamp:
-          Number(parsed.seasonNumber) === seasonNumber && Number(parsed.episodeNumber) === episodeNumber
-            ? Math.max(0, Math.floor(Number(parsed.timestamp || 0)))
-            : 0,
-        progress:
-          Number(parsed.seasonNumber) === seasonNumber && Number(parsed.episodeNumber) === episodeNumber
-            ? Math.max(0, Math.min(100, Number(parsed.progress || 0)))
-            : 0,
+        timestamp: sameEpisode ? Math.max(0, Math.floor(Number(storedData.timestamp || 0))) : 0,
+        progress: sameEpisode
+          ? Math.max(0, Math.min(100, Number(storedData.progress || 0)))
+          : 0,
         updatedAt: new Date().toISOString(),
       };
 
       window.localStorage.setItem(storageKey, JSON.stringify(nextData));
 
-      const indexRaw = window.localStorage.getItem(indexKey);
-      const index: string[] = indexRaw ? JSON.parse(indexRaw) : [];
-      const filtered = index.filter((e) => e !== entry);
-      if (shouldTrackContinueWatching(nextData)) {
-        filtered.unshift(entry);
-      }
-      window.localStorage.setItem(indexKey, JSON.stringify(filtered.slice(0, 50)));
-    } catch {
-      // Ignore storage errors.
-    }
+      const storedIndex = window.localStorage.getItem(indexKey);
+      const indexEntries: string[] = storedIndex ? JSON.parse(storedIndex) : [];
+      const updatedIndex = indexEntries.filter((entry) => entry !== indexEntry);
+      if (shouldTrackContinueWatching(nextData)) updatedIndex.unshift(indexEntry);
+      window.localStorage.setItem(indexKey, JSON.stringify(updatedIndex.slice(0, 50)));
+    } catch {}
   }, [id, seasonNumber, episodeNumber, isProgressLoaded]);
 
   useEffect(() => {
     if (!id || !isProgressLoaded || seasonNumber <= 0 || episodeNumber <= 0) return;
 
-    const storageId = Array.isArray(id) ? id[0] : id;
-    const storageKey = `continue:tv:${storageId}`;
+    const mediaId = Array.isArray(id) ? id[0] : id;
+    const storageKey = `continue:tv:${mediaId}`;
 
     const handleProgressMessage = (event: MessageEvent) => {
       if (event.origin !== VIDFAST_ORIGIN) return;
 
-      const payload = parseVidfastMessageData(event.data) as { type?: string; data?: unknown } | null;
-      if (payload?.type === "PLAYER_EVENT") {
-        logVidfastPlayerEvent(payload.data);
-        return;
-      }
-      if (!payload || payload.type !== "MEDIA_DATA") return;
+      const message = parseVidfastMessageData(event.data) as {
+        type?: string;
+        data?: unknown;
+      } | null;
+      if (!message || message.type !== "MEDIA_DATA") return;
 
-      window.localStorage.setItem("vidFastProgress", JSON.stringify(payload.data));
+      window.localStorage.setItem("vidFastProgress", JSON.stringify(message.data));
 
-      const mediaEntry = getVidfastMediaEntry(payload.data, storageId);
+      const mediaEntry = getVidfastMediaEntry(message.data, mediaId);
       if (!mediaEntry || mediaEntry.type !== "tv") return;
 
       const nextProgress = toContinueProgress(mediaEntry, seasonNumber, episodeNumber);
-      const nextSeason = nextProgress.seasonNumber || seasonNumber;
-      const nextEpisode = nextProgress.episodeNumber || episodeNumber;
-      if (nextSeason > 0 && nextEpisode > 0) {
-        if (nextSeason !== seasonNumber) {
-          setSeasonNumber(nextSeason);
-        }
-        if (nextEpisode !== episodeNumber) {
-          setEpisodeNumber(nextEpisode);
-        }
+      const nextSeasonNumber = nextProgress.seasonNumber || seasonNumber;
+      const nextEpisodeNumber = nextProgress.episodeNumber || episodeNumber;
+
+      if (nextSeasonNumber > 0 && nextEpisodeNumber > 0) {
+        if (nextSeasonNumber !== seasonNumber) setSeasonNumber(nextSeasonNumber);
+        if (nextEpisodeNumber !== episodeNumber) setEpisodeNumber(nextEpisodeNumber);
       }
 
-      const nextData = {
-        seasonNumber: nextSeason,
-        episodeNumber: nextEpisode,
+      const nextData: StoredTvProgress = {
+        seasonNumber: nextSeasonNumber,
+        episodeNumber: nextEpisodeNumber,
         timestamp: nextProgress.timestamp,
         duration: nextProgress.duration,
         progress: nextProgress.progress,
         updatedAt: new Date().toISOString(),
-        title: tvShow?.name || undefined,
-        posterPath: tvShow?.poster_path || undefined,
+        title: show?.name || undefined,
+        posterPath: show?.poster_path || undefined,
         mediaType: "tv",
-        tmdbId: storageId,
+        tmdbId: mediaId,
       };
 
-      window.localStorage.setItem(
-        storageKey,
-        JSON.stringify(nextData)
-      );
+      window.localStorage.setItem(storageKey, JSON.stringify(nextData));
 
       const indexKey = "continueWatching:index";
-      const indexRaw = window.localStorage.getItem(indexKey);
-      const index: string[] = indexRaw ? JSON.parse(indexRaw) : [];
-      const entry = `tv:${storageId}`;
-      const filtered = index.filter((e) => e !== entry);
-      if (shouldTrackContinueWatching(nextData)) {
-        filtered.unshift(entry);
-      }
-      window.localStorage.setItem(indexKey, JSON.stringify(filtered.slice(0, 50)));
+      const storedIndex = window.localStorage.getItem(indexKey);
+      const indexEntries: string[] = storedIndex ? JSON.parse(storedIndex) : [];
+      const indexEntry = `tv:${mediaId}`;
+      const updatedIndex = indexEntries.filter((entry) => entry !== indexEntry);
+      if (shouldTrackContinueWatching(nextData)) updatedIndex.unshift(indexEntry);
+      window.localStorage.setItem(indexKey, JSON.stringify(updatedIndex.slice(0, 50)));
     };
 
     window.addEventListener("message", handleProgressMessage);
     return () => window.removeEventListener("message", handleProgressMessage);
-  }, [id, isProgressLoaded, seasonNumber, episodeNumber, tvShow]);
+  }, [id, isProgressLoaded, seasonNumber, episodeNumber, show]);
 
   useEffect(() => {
     if (!id || !isProgressLoaded || seasonNumber <= 0 || episodeNumber <= 0) return;
 
-    const storageId = Array.isArray(id) ? id[0] : id;
-    const storageKey = `continue:tv:${storageId}`;
+    const mediaId = Array.isArray(id) ? id[0] : id;
+    const storageKey = `continue:tv:${mediaId}`;
 
     try {
-      const stored = window.localStorage.getItem(storageKey);
-      if (!stored) {
+      const storedEntry = window.localStorage.getItem(storageKey);
+      if (!storedEntry) {
         setResumeSeconds(0);
         return;
       }
 
-      const parsed = JSON.parse(stored) as {
-        seasonNumber?: number;
-        episodeNumber?: number;
-        timestamp?: number;
-      };
-      if (Number(parsed.seasonNumber) !== seasonNumber || Number(parsed.episodeNumber) !== episodeNumber) {
+      const storedData: StoredTvProgress = JSON.parse(storedEntry);
+      if (
+        Number(storedData.seasonNumber) !== seasonNumber ||
+        Number(storedData.episodeNumber) !== episodeNumber
+      ) {
         setResumeSeconds(0);
         return;
       }
 
-      const savedTimestamp = Math.floor(Number(parsed.timestamp || 0));
+      const savedTimestamp = Math.floor(Number(storedData.timestamp || 0));
       setResumeSeconds(savedTimestamp > 0 ? savedTimestamp : 0);
     } catch {
       setResumeSeconds(0);
     }
   }, [id, isProgressLoaded, seasonNumber, episodeNumber]);
 
-  if (!tvShow || episodesCount === 0 || seasonNumber <= 0 || episodeNumber <= 0) {
+  if (!show || episodeCount === 0 || seasonNumber <= 0 || episodeNumber <= 0) {
     return <div className="loading">Loading...</div>;
   }
 
@@ -309,7 +284,7 @@ export default function TVDetailsPage() {
 
   return (
     <MediaDetailShell
-      title={tvShow.name || "Untitled"}
+      title={show.name || "Untitled"}
       embedUrl={buildVidfastTvUrl(tvId, seasonNumber, episodeNumber, resumeSeconds)}
     />
   );
