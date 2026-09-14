@@ -3,7 +3,7 @@ import { Readable } from "node:stream";
 
 const VIDFAST_ORIGIN = "https://vidfast.vc";
 const MEDIA_PROXY_PATH = "/api/vidfast-media-proxy";
-const ALLOWED_MEDIA_HOST_SUFFIXES = [".peakstorm.top"];
+const ALLOWED_MEDIA_HOST_SUFFIXES = [".peakstorm.top", ".grandpearl.top"];
 
 function isAllowedMediaHost(hostname: string) {
   const normalized = hostname.toLowerCase();
