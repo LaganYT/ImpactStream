@@ -1,11 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 
-import {
-  MediaCategory,
-  TmdbType,
-  tmdbGet,
-  toMediaDetail,
-} from "../../lib/tmdb";
+import { MediaCategory, tmdbGet, toMediaDetail } from "../../lib/tmdb";
 
 type TmdbDetailPayload = {
   id: number;
@@ -20,8 +15,20 @@ type TmdbDetailPayload = {
   };
   seasons?: Array<{
     season_number: number;
-    episode_count?: number;
   }>;
+};
+
+type EpisodeSummary = {
+  episodeNumber: number;
+  name: string | null;
+  stillPath: string | null;
+  overview: string | null;
+};
+
+type SeasonSummary = {
+  seasonNumber: number;
+  episodeCount: number | null;
+  episodes: EpisodeSummary[];
 };
 
 export default async function handler(
@@ -58,7 +65,7 @@ export default async function handler(
       append_to_response: "external_ids",
     });
 
-    const detail = toMediaDetail(payload, tmdbType as TmdbType, category);
+    const detail = toMediaDetail(payload, tmdbType, category);
     if (!detail) {
       return res.status(404).json({ error: "Title not found." });
     }
@@ -67,29 +74,18 @@ export default async function handler(
     const totalSeasons =
       tmdbType === "tv" ? Number(payload.number_of_seasons || 0) : undefined;
 
-    let episodesPerSeason:
-      | Array<{
-          seasonNumber: number;
-          episodeCount: number | null;
-          episodes?: Array<{
-            episodeNumber: number;
-            name?: string | null;
-            stillPath?: string | null;
-            overview?: string | null;
-          }>;
-        }>
-      | undefined = undefined;
+    let seasons: SeasonSummary[] | undefined;
 
     if (tmdbType === "tv") {
-      const seasonsList: number[] =
+      const seasonNumbers =
         payload.seasons && payload.seasons.length > 0
-          ? payload.seasons.map((s) => s.season_number)
+          ? payload.seasons.map((season) => season.season_number)
           : totalSeasons
-          ? Array.from({ length: totalSeasons }, (_, i) => i + 1)
-          : [];
+            ? Array.from({ length: totalSeasons }, (_, index) => index + 1)
+            : [];
 
-      episodesPerSeason = await Promise.all(
-        seasonsList.map(async (seasonNumber) => {
+      seasons = await Promise.all(
+        seasonNumbers.map(async (seasonNumber) => {
           try {
             const seasonDetail = await tmdbGet<{
               episodes?: Array<{
@@ -100,17 +96,19 @@ export default async function handler(
               }>;
             }>(`/tv/${id}/season/${seasonNumber}`);
 
-            const eps = (seasonDetail.episodes || []).map((e) => ({
-              episodeNumber: e.episode_number,
-              name: e.name || null,
-              stillPath: e.still_path ? `https://image.tmdb.org/t/p/original${e.still_path}` : null,
-              overview: e.overview || null,
+            const episodes = (seasonDetail.episodes || []).map((episode) => ({
+              episodeNumber: episode.episode_number,
+              name: episode.name || null,
+              stillPath: episode.still_path
+                ? `https://image.tmdb.org/t/p/original${episode.still_path}`
+                : null,
+              overview: episode.overview || null,
             }));
 
             return {
               seasonNumber,
-              episodeCount: seasonDetail.episodes ? seasonDetail.episodes.length : null,
-              episodes: eps,
+              episodeCount: seasonDetail.episodes?.length ?? null,
+              episodes,
             };
           } catch {
             return { seasonNumber, episodeCount: null, episodes: [] };
@@ -123,31 +121,24 @@ export default async function handler(
       ...detail,
       imdbId,
       totalSeasons,
-      episodesPerSeason,
-      playbackAvailable: false,
-      downloadAvailable: false,
-      authorizedPlaybackUrl: null,
-      authorizedDownloadUrl: null,
-      availabilityNote:
-        "Playback and download sources are resolved by platform clients; /api/details only returns metadata.",
-      sourceResolutionInput: {
-        required: true,
+      seasons,
+      sourceResolution: {
         strategy: "client",
         request: {
           tmdbId: Number(id),
           mediaType: tmdbType,
           title: payload.title || payload.name || detail.title,
           year: detail.releaseYear || undefined,
-          seasonId: tmdbType === "tv" ? 1 : undefined,
-          episodeId: tmdbType === "tv" ? 1 : undefined,
+          season: tmdbType === "tv" ? 1 : undefined,
+          episode: tmdbType === "tv" ? 1 : undefined,
           totalSeasons,
           imdbId: imdbId || undefined,
         },
       },
     });
-  } catch (error: any) {
+  } catch (error) {
     return res.status(500).json({
-      error: error?.message || "Failed to load title details.",
+      error: error instanceof Error ? error.message : "Failed to load title details.",
     });
   }
 }
