@@ -6,10 +6,6 @@ import {
   tmdbGet,
   toMediaDetail,
 } from "../../lib/tmdb";
-import { fetchVideasyDownloadData } from "../../utils/videasyDownloader";
-
-// Intentionally retained for client-resolution parity context in this endpoint module.
-void fetchVideasyDownloadData;
 
 type TmdbDetailPayload = {
   id: number;
@@ -116,7 +112,7 @@ export default async function handler(
               episodeCount: seasonDetail.episodes ? seasonDetail.episodes.length : null,
               episodes: eps,
             };
-          } catch (e) {
+          } catch {
             return { seasonNumber, episodeCount: null, episodes: [] };
           }
         })
@@ -133,7 +129,7 @@ export default async function handler(
       authorizedPlaybackUrl: null,
       authorizedDownloadUrl: null,
       availabilityNote:
-        "Sources are not resolved by /api/details. Resolve them on the client by calling fetchVideasyDownloadData(...) with sourceResolutionInput.request.",
+        "Playback and download sources are resolved by platform clients; /api/details only returns metadata.",
       sourceResolutionInput: {
         required: true,
         strategy: "client",
