@@ -12,8 +12,21 @@ function isAllowedMediaHost(hostname: string) {
   );
 }
 
-function getProxyUrl(url: string) {
-  return `${MEDIA_PROXY_PATH}?url=${encodeURIComponent(url)}`;
+function getRequestOrigin(req: NextApiRequest) {
+  const forwardedProto = req.headers["x-forwarded-proto"];
+  const forwardedHost = req.headers["x-forwarded-host"];
+  const protocol =
+    (typeof forwardedProto === "string" && forwardedProto.split(",")[0]?.trim()) ||
+    (req.headers.host?.startsWith("localhost") ? "http" : "https");
+  const host =
+    (typeof forwardedHost === "string" && forwardedHost.split(",")[0]?.trim()) ||
+    req.headers.host;
+
+  return host ? `${protocol}://${host}` : "";
+}
+
+function getProxyUrl(url: string, requestOrigin: string) {
+  return `${requestOrigin}${MEDIA_PROXY_PATH}?url=${encodeURIComponent(url)}`;
 }
 
 function resolveUrl(value: string, baseUrl: string) {
@@ -24,7 +37,7 @@ function resolveUrl(value: string, baseUrl: string) {
   }
 }
 
-function rewritePlaylist(playlist: string, baseUrl: string) {
+function rewritePlaylist(playlist: string, baseUrl: string, requestOrigin: string) {
   return playlist
     .split(/\r?\n/)
     .map((line) => {
@@ -33,11 +46,11 @@ function rewritePlaylist(playlist: string, baseUrl: string) {
 
       if (trimmed.startsWith("#")) {
         return line.replace(/URI="([^"]+)"/g, (_match, uri: string) => {
-          return `URI="${getProxyUrl(resolveUrl(uri, baseUrl))}"`;
+          return `URI="${getProxyUrl(resolveUrl(uri, baseUrl), requestOrigin)}"`;
         });
       }
 
-      return getProxyUrl(resolveUrl(trimmed, baseUrl));
+      return getProxyUrl(resolveUrl(trimmed, baseUrl), requestOrigin);
     })
     .join("\n");
 }
@@ -101,8 +114,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (isPlaylist) {
       const playlist = await upstream.text();
+      const requestOrigin = getRequestOrigin(req);
       res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
-      return res.status(upstream.status).send(rewritePlaylist(playlist, targetUrl.toString()));
+      return res
+        .status(upstream.status)
+        .send(rewritePlaylist(playlist, targetUrl.toString(), requestOrigin));
     }
 
     res.setHeader("Content-Type", contentType);
