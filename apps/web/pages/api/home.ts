@@ -17,8 +17,8 @@ type HomeSection = {
   items: MediaSummary[];
 };
 
-function compactMedia(items: Array<MediaSummary | null>, limit = 18): MediaSummary[] {
-  return items.filter((item): item is MediaSummary => Boolean(item)).slice(0, limit);
+function compactMedia(items: Array<MediaSummary | null>): MediaSummary[] {
+  return items.filter((item): item is MediaSummary => Boolean(item));
 }
 
 export default async function handler(
@@ -61,17 +61,21 @@ export default async function handler(
         title: "Popular Movies",
         items: compactMedia(
           (popularMovies.results || []).map((item) => toMediaSummary(item, "movie"))
-        ),
+        ).slice(0, 18),
       },
       {
         id: "shows",
         title: "On The Air",
-        items: compactMedia((onTheAir.results || []).map((item) => toMediaSummary(item, "tv"))),
+        items: compactMedia(
+          (onTheAir.results || []).map((item) => toMediaSummary(item, "tv"))
+        ).slice(0, 18),
       },
       {
         id: "anime",
         title: "Anime Spotlight",
-        items: compactMedia((animeShows.results || []).map((item) => toMediaSummary(item, "tv"))),
+        items: compactMedia(
+          (animeShows.results || []).map((item) => toMediaSummary(item, "tv"))
+        ).slice(0, 18),
       },
     ];
 
