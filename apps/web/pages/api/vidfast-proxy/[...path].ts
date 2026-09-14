@@ -72,81 +72,6 @@ function copySetCookies(upstream: Response, res: NextApiResponse) {
 }
 
 function rewriteHtml(html: string) {
-  const guardScript = `<script>(function(){
-    var upstream=${JSON.stringify(VIDFAST_ORIGIN)};
-    var prefix=${JSON.stringify(PROXY_PREFIX)};
-    function proxify(value){
-      try {
-        var url=new URL(String(value),upstream);
-        return url.origin===upstream?prefix+url.pathname+url.search+url.hash:value;
-      }catch(_){return value;}
-    }
-
-    try{
-      Object.defineProperty(window,'open',{value:function(){return null;},writable:false,configurable:false});
-    }catch(_){
-      window.open=function(){return null;};
-    }
-
-    var nativeFetch=window.fetch;
-    if(nativeFetch){
-      window.fetch=function(input,init){
-        if(typeof input==='string'||input instanceof URL){
-          return nativeFetch.call(this,proxify(input),init);
-        }
-        if(input instanceof Request){
-          var next=proxify(input.url);
-          if(next!==input.url) input=new Request(next,input);
-        }
-        return nativeFetch.call(this,input,init);
-      };
-    }
-
-    var nativeOpen=XMLHttpRequest.prototype.open;
-    XMLHttpRequest.prototype.open=function(method,url){
-      arguments[1]=proxify(url);
-      return nativeOpen.apply(this,arguments);
-    };
-
-    function blockExternalNavigation(event){
-      var element=event.target instanceof Element?event.target.closest('a'):null;
-      if(!element)return;
-      var href=element.getAttribute('href');
-      if(!href)return;
-      try{
-        var url=new URL(href,upstream);
-        if(url.origin!==upstream){
-          event.preventDefault();
-          event.stopImmediatePropagation();
-          return;
-        }
-        element.href=proxify(url.href);
-        element.removeAttribute('target');
-      }catch(_){}
-    }
-
-    document.addEventListener('click',blockExternalNavigation,true);
-    document.addEventListener('auxclick',blockExternalNavigation,true);
-
-    document.addEventListener('submit',function(event){
-      var form=event.target;
-      if(!(form instanceof HTMLFormElement))return;
-      var action=form.getAttribute('action');
-      if(action){
-        try{
-          var url=new URL(action,upstream);
-          if(url.origin!==upstream){
-            event.preventDefault();
-            event.stopImmediatePropagation();
-            return;
-          }
-          form.action=proxify(url.href);
-        }catch(_){}
-      }
-      form.removeAttribute('target');
-    },true);
-  })();</script>`;
-
   const rewriteAttribute = (
     _match: string,
     name: string,
@@ -164,19 +89,11 @@ function rewriteHtml(html: string) {
     return `${name}=${quote}${value}${quote}`;
   };
 
-  let rewritten = html.replace(
-    /\b(src|href|poster|action)=(['"])([^'"]*)\2/gi,
-    rewriteAttribute
-  );
-
-  const baseTag = `<base href="${PROXY_PREFIX}/">`;
-  if (/<head[^>]*>/i.test(rewritten)) {
-    rewritten = rewritten.replace(/<head([^>]*)>/i, `<head$1>${baseTag}${guardScript}`);
-  } else {
-    rewritten = `${baseTag}${guardScript}${rewritten}`;
-  }
-
-  return rewritten;
+  return html
+    .replace(/\b(src|href|poster|action)=(['"])([^'"]*)\2/gi, rewriteAttribute)
+    .replace(/(["'`])\/_next\//g, `$1${PROXY_PREFIX}/_next/`)
+    .replace(/\\\/_next\\\//g, `\\${PROXY_PREFIX.replaceAll("/", "\\/")}\\/`)
+    .replace(/https:\/\/vidfast\.vc\/_next\//g, `${PROXY_PREFIX}/_next/`);
 }
 
 function rewriteCss(css: string) {
