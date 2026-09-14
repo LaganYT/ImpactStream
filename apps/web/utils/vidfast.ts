@@ -1,7 +1,4 @@
-export const VIDFAST_UPSTREAM_ORIGIN = "https://vidfast.vc";
-export const VIDFAST_ORIGIN =
-  typeof window === "undefined" ? VIDFAST_UPSTREAM_ORIGIN : window.location.origin;
-export const VIDFAST_PROXY_PREFIX = "/api/vidfast-proxy";
+export const VIDFAST_ORIGIN = "https://vidfast.vc";
 
 type VidfastMediaType = "movie" | "tv";
 
@@ -37,7 +34,7 @@ export type ContinueProgressPayload = {
 export function buildVidfastMovieUrl(tmdbId: string, resumeSeconds = 0) {
   const query = new URLSearchParams({ autoPlay: "true" });
   if (resumeSeconds > 0) query.set("startAt", String(resumeSeconds));
-  return `${VIDFAST_PROXY_PREFIX}/movie/${tmdbId}${appendQueryString(query)}`;
+  return `${VIDFAST_ORIGIN}/movie/${tmdbId}${appendQueryString(query)}`;
 }
 
 export function buildVidfastTvUrl(
@@ -52,11 +49,7 @@ export function buildVidfastTvUrl(
     autoNext: "true",
   });
   if (resumeSeconds > 0) query.set("startAt", String(resumeSeconds));
-  return `${VIDFAST_PROXY_PREFIX}/tv/${tmdbId}/${season}/${episode}${appendQueryString(query)}`;
-}
-
-export function isVidfastMessageOrigin(origin: string) {
-  return origin === VIDFAST_ORIGIN || origin === VIDFAST_UPSTREAM_ORIGIN;
+  return `${VIDFAST_ORIGIN}/tv/${tmdbId}/${season}/${episode}${appendQueryString(query)}`;
 }
 
 export function parseVidfastMessageData(data: unknown) {
