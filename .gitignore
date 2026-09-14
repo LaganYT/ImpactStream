@@ -11,8 +11,6 @@ next-env.d.ts
 .env
 *.log
 
-# Generated Expo native projects (remove these lines if you intentionally commit prebuild output)
+# Expo prebuild output
 apps/mobile/android/
 apps/mobile/ios/
-
-denemeflix-main
