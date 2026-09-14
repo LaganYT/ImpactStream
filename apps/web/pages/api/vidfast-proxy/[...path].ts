@@ -104,9 +104,13 @@ function rewriteCss(css: string) {
 }
 
 function rewriteJavaScript(source: string) {
-  return source
+  const runtimeProxyShim = `;(()=>{if(window.__impactStreamVidfastRuntimeProxy)return;window.__impactStreamVidfastRuntimeProxy=true;const prefix=${JSON.stringify(PROXY_PREFIX)};const proxify=value=>{try{const url=new URL(String(value),window.location.origin);if(url.origin!==window.location.origin||url.pathname===prefix||url.pathname.startsWith(prefix+"/"))return value;return prefix+url.pathname+url.search+url.hash}catch{return value}};const nativeFetch=window.fetch;if(nativeFetch){window.fetch=function(input,init){if(input instanceof Request){const next=proxify(input.url);if(next!==input.url)input=new Request(next,input)}else if(typeof input==="string"||input instanceof URL){input=proxify(input)}return nativeFetch.call(this,input,init)}}const nativeXhrOpen=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(method,url){arguments[1]=proxify(url);return nativeXhrOpen.apply(this,arguments)}})();`;
+
+  const rewritten = source
     .replace(/(["'`])\/_next\//g, `$1${PROXY_PREFIX}/_next/`)
     .replace(/https:\/\/vidfast\.vc\/_next\//g, `${PROXY_PREFIX}/_next/`);
+
+  return `${runtimeProxyShim}${rewritten}`;
 }
 
 function copyResponseHeaders(upstream: Response, res: NextApiResponse) {
