@@ -11,7 +11,6 @@ interface VideoJSPlayerProps {
   onPlay?: () => void;
   onPause?: () => void;
   onError?: (error: string) => void;
-  onReady?: () => void;
 }
 
 const VideoJSPlayer: React.FC<VideoJSPlayerProps> = ({
@@ -22,7 +21,6 @@ const VideoJSPlayer: React.FC<VideoJSPlayerProps> = ({
   onPlay,
   onPause,
   onError,
-  onReady,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<any>(null);
@@ -63,7 +61,6 @@ const VideoJSPlayer: React.FC<VideoJSPlayerProps> = ({
       () => {
         playerRef.current = player;
         setIsLoading(false);
-        onReady?.();
 
         player.on("play", () => onPlay?.());
         player.on("pause", () => onPause?.());
@@ -82,7 +79,7 @@ const VideoJSPlayer: React.FC<VideoJSPlayerProps> = ({
       player.dispose();
       playerRef.current = null;
     };
-  }, [src, autoPlay, muted, onPlay, onPause, onError, onReady]);
+  }, [src, autoPlay, muted, onPlay, onPause, onError]);
 
   const handleRetry = () => {
     setHasError(false);
