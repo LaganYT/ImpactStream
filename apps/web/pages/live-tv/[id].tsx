@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import axios from "axios";
 import { FaArrowLeft } from "react-icons/fa";
-import VideoJSPlayer from "../../components/VideoJSPlayer";
+import LiveStreamPlayer from "../../components/LiveStreamPlayer";
 
 interface Channel {
   nanoid: string;
@@ -36,15 +36,15 @@ type ChannelGuide = {
   programs: GuideProgram[];
 };
 
-const getPlayableStreamUrl = (url: string) => {
+function getPlayableStreamUrl(url: string) {
   if (typeof window !== "undefined" && window.location.protocol === "https:" && url.startsWith("http://")) {
     return `/api/stream-proxy?url=${encodeURIComponent(url)}`;
   }
 
   return url;
-};
+}
 
-export default function TVPlayer() {
+export default function LiveTvChannelPage() {
   const router = useRouter();
   const { id } = router.query;
   const [channel, setChannel] = useState<Channel | null>(null);
@@ -55,9 +55,35 @@ export default function TVPlayer() {
   const [guideLoading, setGuideLoading] = useState(false);
 
   useEffect(() => {
-    if (id) {
-      fetchChannel();
-    }
+    if (!id) return;
+
+    const fetchChannel = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get<Channel[]>("/api/live-tv");
+        const routeId = Array.isArray(id) ? id[0] : id;
+        const selectedChannel = response.data.find((item) => item.nanoid === routeId);
+
+        if (!selectedChannel) {
+          setError("Channel not found");
+          return;
+        }
+
+        setChannel(selectedChannel);
+        if (selectedChannel.iptv_urls.length > 0) {
+          setStreamUrl(getPlayableStreamUrl(selectedChannel.iptv_urls[0]));
+        } else if (selectedChannel.youtube_urls.length > 0) {
+          setStreamUrl(selectedChannel.youtube_urls[0]);
+        }
+      } catch (requestError) {
+        console.error("Error fetching channel:", requestError);
+        setError("Failed to load channel");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchChannel();
   }, [id]);
 
   useEffect(() => {
@@ -66,10 +92,12 @@ export default function TVPlayer() {
     const fetchGuide = async () => {
       try {
         setGuideLoading(true);
-        const response = await axios.get(`/api/live-tv-guide?channel=${encodeURIComponent(channel.nanoid)}`);
+        const response = await axios.get(
+          `/api/live-tv-guide?channel=${encodeURIComponent(channel.nanoid)}`
+        );
         setGuide(response.data);
-      } catch (err) {
-        console.error('Error fetching guide:', err);
+      } catch (requestError) {
+        console.error("Error fetching guide:", requestError);
         setGuide(null);
       } finally {
         setGuideLoading(false);
@@ -79,35 +107,7 @@ export default function TVPlayer() {
     fetchGuide();
   }, [channel?.nanoid]);
 
-  const fetchChannel = async () => {
-    try {
-      setLoading(true);
-      const response = await axios.get('/api/live-tv');
-      const channels = response.data;
-      const foundChannel = channels.find((ch: Channel) => ch.nanoid === id);
-      
-      if (foundChannel) {
-        setChannel(foundChannel);
-        // Prefer IPTV URL over YouTube URL
-        if (foundChannel.iptv_urls.length > 0) {
-          setStreamUrl(getPlayableStreamUrl(foundChannel.iptv_urls[0]));
-        } else if (foundChannel.youtube_urls.length > 0) {
-          setStreamUrl(foundChannel.youtube_urls[0]);
-        }
-      } else {
-        setError("Channel not found");
-      }
-    } catch (err) {
-      setError("Failed to load channel");
-      console.error('Error fetching channel:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleBack = () => {
-    router.push('/live-tv');
-  };
+  const goBack = () => router.push("/live-tv");
 
   const formatGuideTime = (value: string) => {
     if (!value) return "";
@@ -119,17 +119,12 @@ export default function TVPlayer() {
     }).format(new Date(value));
   };
 
-  const getProgramDurationMinutes = (program: GuideProgram) => {
+  const getProgramWidth = (program: GuideProgram) => {
     const startTime = new Date(program.start).getTime();
     const stopTime = new Date(program.stop).getTime();
-    const duration = (stopTime - startTime) / 60000;
-
-    return Number.isFinite(duration) && duration > 0 ? duration : 30;
-  };
-
-  const getProgramGridWidth = (program: GuideProgram) => {
-    const duration = getProgramDurationMinutes(program);
-    return Math.max(150, Math.min(260, duration * 2.2));
+    const durationMinutes = (stopTime - startTime) / 60000;
+    const validDuration = Number.isFinite(durationMinutes) && durationMinutes > 0 ? durationMinutes : 30;
+    return Math.max(150, Math.min(260, validDuration * 2.2));
   };
 
   if (loading) {
@@ -146,7 +141,7 @@ export default function TVPlayer() {
         <div className="error">
           <h2>Error</h2>
           <p>{error || "Channel not found"}</p>
-          <button onClick={handleBack} className="back-button">
+          <button onClick={goBack} className="back-button">
             <FaArrowLeft /> Back to Live TV
           </button>
         </div>
@@ -157,26 +152,23 @@ export default function TVPlayer() {
   return (
     <div className="tv-player-container">
       <div className="player-header">
-        <button onClick={handleBack} className="back-button">
+        <button onClick={goBack} className="back-button">
           <FaArrowLeft /> Back
         </button>
         <h1>{channel.name}</h1>
         <div className="channel-info">
-          {channel.language && <span className="language">{channel.language.toUpperCase()}</span>}
-          {channel.country && <span className="country">{channel.country.toUpperCase()}</span>}
+          {channel.language ? <span className="language">{channel.language.toUpperCase()}</span> : null}
+          {channel.country ? <span className="country">{channel.country.toUpperCase()}</span> : null}
         </div>
       </div>
 
       <div className="video-container">
         {channel.iptv_urls.length > 0 ? (
-          <VideoJSPlayer
+          <LiveStreamPlayer
             src={streamUrl}
             channelName={channel.name}
-            autoPlay={true}
-            muted={false}
-            onPlay={() => console.log('Playing')}
-            onPause={() => console.log('Paused')}
-            onError={(error) => setError(error)}
+            autoPlay
+            onError={setError}
           />
         ) : channel.youtube_urls.length > 0 ? (
           <iframe
@@ -190,7 +182,7 @@ export default function TVPlayer() {
         ) : (
           <div className="no-stream">
             <p>No stream available for this channel</p>
-            <button onClick={handleBack} className="back-button">
+            <button onClick={goBack} className="back-button">
               <FaArrowLeft /> Back to Live TV
             </button>
           </div>
@@ -203,16 +195,16 @@ export default function TVPlayer() {
           <div className="detail-item">
             <strong>Name:</strong> {channel.name}
           </div>
-          {channel.language && (
+          {channel.language ? (
             <div className="detail-item">
               <strong>Language:</strong> {channel.language.toUpperCase()}
             </div>
-          )}
-          {channel.country && (
+          ) : null}
+          {channel.country ? (
             <div className="detail-item">
               <strong>Country:</strong> {channel.country.toUpperCase()}
             </div>
-          )}
+          ) : null}
           <div className="detail-item">
             <strong>Stream Type:</strong> {channel.iptv_urls.length > 0 ? "IPTV" : "YouTube"}
           </div>
@@ -232,7 +224,7 @@ export default function TVPlayer() {
               <div
                 className="guide-slot"
                 key={`${program.start}-${program.title}-${index}`}
-                style={{ minWidth: `${getProgramGridWidth(program)}px` }}
+                style={{ minWidth: `${getProgramWidth(program)}px` }}
               >
                 <div className="guide-slot-time">
                   {formatGuideTime(program.start)}
