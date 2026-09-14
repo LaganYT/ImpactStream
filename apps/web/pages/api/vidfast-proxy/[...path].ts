@@ -3,6 +3,7 @@ import { Readable } from "node:stream";
 
 const VIDFAST_ORIGIN = "https://vidfast.vc";
 const PROXY_PREFIX = "/api/vidfast-proxy";
+const COOKIE_PREFIX = "vf_";
 
 export const config = {
   api: {
@@ -35,6 +36,41 @@ function proxyUrl(value: string) {
   }
 }
 
+function getUpstreamCookieHeader(req: NextApiRequest) {
+  return (req.headers.cookie || "")
+    .split(";")
+    .map((cookie) => cookie.trim())
+    .filter((cookie) => cookie.startsWith(COOKIE_PREFIX))
+    .map((cookie) => cookie.slice(COOKIE_PREFIX.length))
+    .join("; ");
+}
+
+function rewriteSetCookie(cookie: string) {
+  const parts = cookie.split(";").map((part) => part.trim());
+  const [nameValue, ...attributes] = parts;
+  const equalsIndex = nameValue.indexOf("=");
+  if (equalsIndex <= 0) return null;
+
+  const name = nameValue.slice(0, equalsIndex);
+  const value = nameValue.slice(equalsIndex + 1);
+  const rewrittenAttributes = attributes.filter(
+    (attribute) => !/^domain=/i.test(attribute) && !/^path=/i.test(attribute)
+  );
+
+  return [
+    `${COOKIE_PREFIX}${name}=${value}`,
+    `Path=${PROXY_PREFIX}`,
+    ...rewrittenAttributes,
+  ].join("; ");
+}
+
+function copySetCookies(upstream: Response, res: NextApiResponse) {
+  const getSetCookie = (upstream.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie;
+  const cookies = getSetCookie ? getSetCookie.call(upstream.headers) : [];
+  const rewritten = cookies.map(rewriteSetCookie).filter((cookie): cookie is string => Boolean(cookie));
+  if (rewritten.length) res.setHeader("Set-Cookie", rewritten);
+}
+
 function rewriteHtml(html: string) {
   const guardScript = `<script>(function(){
     var upstream=${JSON.stringify(VIDFAST_ORIGIN)};
@@ -57,6 +93,14 @@ function rewriteHtml(html: string) {
         try{
           var getAttribute=frame.getAttribute.bind(frame);
           frame.getAttribute=function(name){return String(name).toLowerCase()==='sandbox'?null:getAttribute(name);};
+        }catch(_){}
+        try{
+          var removeAttribute=frame.removeAttribute.bind(frame);
+          frame.removeAttribute=function(name){if(String(name).toLowerCase()==='sandbox')return;return removeAttribute(name);};
+        }catch(_){}
+        try{
+          var setAttribute=frame.setAttribute.bind(frame);
+          frame.setAttribute=function(name,value){if(String(name).toLowerCase()==='sandbox')return;return setAttribute(name,value);};
         }catch(_){}
       }
     }catch(_){}
@@ -112,7 +156,10 @@ function rewriteHtml(html: string) {
   let rewritten = html
     .replace(/https:\/\/vidfast\.vc(?=\/)/gi, PROXY_PREFIX)
     .replace(/(["'])\/(?!\/|api\/vidfast-proxy\/)/g, `$1${PROXY_PREFIX}/`)
-    .replace(/(<(?:script|link|img|source|video|audio|iframe|form)\b[^>]*\b(?:src|href|poster|action)=)(["'])(https:\/\/vidfast\.vc[^"']*)\2/gi, (_match, start, quote, url) => `${start}${quote}${proxyUrl(url)}${quote}`);
+    .replace(
+      /(<(?:script|link|img|source|video|audio|iframe|form)\b[^>]*\b(?:src|href|poster|action)=)(["'])(https:\/\/vidfast\.vc[^"']*)\2/gi,
+      (_match, start, quote, url) => `${start}${quote}${proxyUrl(url)}${quote}`
+    );
 
   const baseTag = `<base href="${PROXY_PREFIX}/">`;
   if (/<head[^>]*>/i.test(rewritten)) {
@@ -125,7 +172,10 @@ function rewriteHtml(html: string) {
 }
 
 function rewriteCss(css: string) {
-  return css.replace(/url\((['"]?)\/(?!\/|api\/vidfast-proxy\/)([^)'"\s]+)\1\)/gi, `url($1${PROXY_PREFIX}/$2$1)`);
+  return css.replace(
+    /url\((['"]?)\/(?!\/|api\/vidfast-proxy\/)([^)'"\s]+)\1\)/gi,
+    `url($1${PROXY_PREFIX}/$2$1)`
+  );
 }
 
 function copyResponseHeaders(upstream: Response, res: NextApiResponse) {
@@ -174,6 +224,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const value = req.headers[name];
     if (typeof value === "string") headers.set(name, value);
   }
+
+  const upstreamCookies = getUpstreamCookieHeader(req);
+  if (upstreamCookies) headers.set("cookie", upstreamCookies);
   headers.set("referer", `${VIDFAST_ORIGIN}/`);
   headers.set("origin", VIDFAST_ORIGIN);
 
@@ -183,9 +236,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       method,
       headers,
       body,
-      redirect: "follow",
+      redirect: "manual",
     });
 
+    if (upstream.status >= 300 && upstream.status < 400) {
+      const location = upstream.headers.get("location");
+      if (!location) return res.status(502).json({ message: "Invalid upstream redirect" });
+
+      const redirectUrl = new URL(location, upstreamUrl);
+      if (redirectUrl.origin !== VIDFAST_ORIGIN) {
+        return res.status(502).json({ message: "Blocked external upstream redirect" });
+      }
+
+      res.setHeader("Location", proxyUrl(redirectUrl.href));
+      return res.status(upstream.status).end();
+    }
+
+    copySetCookies(upstream, res);
     copyResponseHeaders(upstream, res);
     const contentType = upstream.headers.get("content-type") || "application/octet-stream";
 
