@@ -6,7 +6,7 @@ type TmdbGenre = {
   name: string;
 };
 
-type TmdbMediaPayload = {
+export type TmdbMediaPayload = {
   id: number;
   media_type?: string;
   genre_ids?: number[];
@@ -60,15 +60,12 @@ const TMDB_POSTER_BASE_URL = "https://image.tmdb.org/t/p/w500";
 const TMDB_BACKDROP_BASE_URL = "https://image.tmdb.org/t/p/original";
 
 export function getTmdbApiKey(): string {
-  const key = process.env.TMDB_API_KEY || process.env.NEXT_PUBLIC_TMDB_API_KEY;
-
-  if (!key) {
-    throw new Error(
-      "TMDB API key is missing. Set TMDB_API_KEY or NEXT_PUBLIC_TMDB_API_KEY."
-    );
+  const apiKey = process.env.TMDB_API_KEY || process.env.NEXT_PUBLIC_TMDB_API_KEY;
+  if (!apiKey) {
+    throw new Error("TMDB API key is missing. Set TMDB_API_KEY or NEXT_PUBLIC_TMDB_API_KEY.");
   }
 
-  return key;
+  return apiKey;
 }
 
 export async function tmdbGet<T>(
@@ -78,13 +75,13 @@ export async function tmdbGet<T>(
   const url = new URL(`${TMDB_BASE_URL}${path}`);
   url.searchParams.set("api_key", getTmdbApiKey());
 
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== "") {
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== "") {
       url.searchParams.set(key, String(value));
     }
-  });
+  }
 
-  const response = await fetch(url.toString());
+  const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`TMDB request failed: ${response.status} ${response.statusText}`);
   }
@@ -96,9 +93,7 @@ export function toMediaSummary(
   item: TmdbMediaPayload,
   forcedType?: TmdbType
 ): MediaSummary | null {
-  if (!item?.id) {
-    return null;
-  }
+  if (!item?.id) return null;
 
   const tmdbType = resolveTmdbType(item, forcedType);
   const category = isAnime(item, tmdbType) ? "anime" : tmdbType;
@@ -126,13 +121,10 @@ export function toMediaDetail(
   forcedCategory?: MediaCategory
 ): MediaDetail | null {
   const summary = toMediaSummary(item, forcedType);
-  if (!summary) {
-    return null;
-  }
+  if (!summary) return null;
 
-  const tmdbType = summary.tmdbType;
   const runtimeLabel =
-    tmdbType === "movie"
+    summary.tmdbType === "movie"
       ? item.runtime
         ? `${item.runtime} min`
         : "Runtime unavailable"
@@ -148,12 +140,11 @@ export function toMediaDetail(
     genres: (item.genres || []).map((genre) => genre.name),
     runtimeLabel,
     seasonsLabel:
-      tmdbType === "tv" && item.number_of_seasons
+      summary.tmdbType === "tv" && item.number_of_seasons
         ? `${item.number_of_seasons} seasons`
         : undefined,
     status: item.status,
-    availabilityNote:
-      "This API currently provides live metadata only. Add authorized source URLs on the server before enabling playback or downloads in the Flutter client.",
+    availabilityNote: "Playback and download sources are resolved separately by each platform client.",
     playbackAvailable: false,
     downloadAvailable: false,
     authorizedPlaybackUrl: null,
@@ -162,10 +153,7 @@ export function toMediaDetail(
 }
 
 function resolveTmdbType(item: TmdbMediaPayload, forcedType?: TmdbType): TmdbType {
-  if (forcedType) {
-    return forcedType;
-  }
-
+  if (forcedType) return forcedType;
   return item.media_type === "tv" || Boolean(item.first_air_date) ? "tv" : "movie";
 }
 
