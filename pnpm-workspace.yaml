@@ -2,6 +2,13 @@ packages:
   - "apps/*"
   - "packages/*"
 
+# pnpm 11+ blocks packages published within the last 24 hours by default.
+# Keep that protection enabled, but allow the exact fresh versions already
+# resolved in this branch's lockfile so Vercel can reproduce the install.
+minimumReleaseAgeExclude:
+  - "@tybys/wasm-util@0.10.4"
+  - "zod@4.6.5"
+
 allowBuilds:
   core-js: true
   sharp: true
