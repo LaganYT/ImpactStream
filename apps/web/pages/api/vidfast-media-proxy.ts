@@ -1,15 +1,62 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import { Readable } from "node:stream";
 
 const VIDFAST_ORIGIN = "https://vidfast.vc";
 const MEDIA_PROXY_PATH = "/api/vidfast-media-proxy";
-const ALLOWED_MEDIA_HOST_SUFFIXES = [".peakstorm.top", ".grandpearl.top"];
 
-function isAllowedMediaHost(hostname: string) {
-  const normalized = hostname.toLowerCase();
-  return ALLOWED_MEDIA_HOST_SUFFIXES.some(
-    (suffix) => normalized === suffix.slice(1) || normalized.endsWith(suffix)
+function isPrivateIpv4(address: string) {
+  const octets = address.split(".").map(Number);
+  if (octets.length !== 4 || octets.some((part) => Number.isNaN(part))) return false;
+
+  const [a, b] = octets;
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    a >= 224
   );
+}
+
+function isPrivateIpv6(address: string) {
+  const normalized = address.toLowerCase();
+  return (
+    normalized === "::" ||
+    normalized === "::1" ||
+    normalized.startsWith("fc") ||
+    normalized.startsWith("fd") ||
+    normalized.startsWith("fe8") ||
+    normalized.startsWith("fe9") ||
+    normalized.startsWith("fea") ||
+    normalized.startsWith("feb")
+  );
+}
+
+function isPrivateIp(address: string) {
+  const family = isIP(address);
+  if (family === 4) return isPrivateIpv4(address);
+  if (family === 6) return isPrivateIpv6(address);
+  return false;
+}
+
+async function isPublicHttpsTarget(url: URL) {
+  if (url.protocol !== "https:") return false;
+
+  const hostname = url.hostname.toLowerCase();
+  if (hostname === "localhost" || hostname.endsWith(".localhost")) return false;
+  if (isPrivateIp(hostname)) return false;
+
+  try {
+    const addresses = await lookup(hostname, { all: true, verbatim: true });
+    return addresses.length > 0 && addresses.every(({ address }) => !isPrivateIp(address));
+  } catch {
+    return false;
+  }
 }
 
 function getRequestOrigin(req: NextApiRequest) {
@@ -76,8 +123,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ message: "Invalid media URL" });
   }
 
-  if (targetUrl.protocol !== "https:" || !isAllowedMediaHost(targetUrl.hostname)) {
-    return res.status(400).json({ message: "Unsupported media host" });
+  if (!(await isPublicHttpsTarget(targetUrl))) {
+    return res.status(400).json({ message: "Unsupported media target" });
   }
 
   const headers = new Headers({
