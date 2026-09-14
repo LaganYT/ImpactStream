@@ -74,7 +74,7 @@ export default async function handler(
     const totalSeasons =
       tmdbType === "tv" ? Number(payload.number_of_seasons || 0) : undefined;
 
-    let seasons: SeasonSummary[] | undefined;
+    let seasonSummaries: SeasonSummary[] | undefined;
 
     if (tmdbType === "tv") {
       const seasonNumbers =
@@ -84,7 +84,7 @@ export default async function handler(
             ? Array.from({ length: totalSeasons }, (_, index) => index + 1)
             : [];
 
-      seasons = await Promise.all(
+      seasonSummaries = await Promise.all(
         seasonNumbers.map(async (seasonNumber) => {
           try {
             const seasonDetail = await tmdbGet<{
@@ -121,16 +121,17 @@ export default async function handler(
       ...detail,
       imdbId,
       totalSeasons,
-      seasons,
-      sourceResolution: {
+      episodesPerSeason: seasonSummaries,
+      sourceResolutionInput: {
+        required: true,
         strategy: "client",
         request: {
           tmdbId: Number(id),
           mediaType: tmdbType,
           title: payload.title || payload.name || detail.title,
           year: detail.releaseYear || undefined,
-          season: tmdbType === "tv" ? 1 : undefined,
-          episode: tmdbType === "tv" ? 1 : undefined,
+          seasonId: tmdbType === "tv" ? 1 : undefined,
+          episodeId: tmdbType === "tv" ? 1 : undefined,
           totalSeasons,
           imdbId: imdbId || undefined,
         },
