@@ -181,7 +181,14 @@ function rewriteCss(css: string) {
 function rewriteJavaScript(source: string) {
   return source
     .replace(/(["'`])\/_next\//g, `$1${PROXY_PREFIX}/_next/`)
-    .replace(/https:\/\/vidfast\.vc\/_next\//g, `${PROXY_PREFIX}/_next/`);
+    .replace(/https:\/\/vidfast\.vc\/_next\//g, `${PROXY_PREFIX}/_next/`)
+    .replace(
+      /document\[[^\]]+\]\.innerHTML='<div style="display:flex;justify-content:center;align-items:center;height:100vh"><h1>Please Disable Sandbox<\/h1><\/div>'/g,
+      "void 0"
+    )
+    .replace(/\.hasAttribute\("sandbox"\)/g, '.hasAttribute("__impactstream_sandbox__")')
+    .replace(/document\[[^\]]+\]=document\.domain/g, "void 0")
+    .replace(/document\.domain\s*=\s*document\.domain/g, "void 0");
 }
 
 function copyResponseHeaders(upstream: Response, res: NextApiResponse) {
