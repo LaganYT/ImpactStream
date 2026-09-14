@@ -1,4 +1,6 @@
-export const VIDFAST_ORIGIN = "https://vidfast.vc";
+export const VIDFAST_UPSTREAM_ORIGIN = "https://vidfast.vc";
+export const VIDFAST_ORIGIN =
+  typeof window === "undefined" ? VIDFAST_UPSTREAM_ORIGIN : window.location.origin;
 export const VIDFAST_PROXY_PREFIX = "/api/vidfast-proxy";
 
 type VidfastMediaType = "movie" | "tv";
@@ -54,8 +56,7 @@ export function buildVidfastTvUrl(
 }
 
 export function isVidfastMessageOrigin(origin: string) {
-  if (origin === VIDFAST_ORIGIN) return true;
-  return typeof window !== "undefined" && origin === window.location.origin;
+  return origin === VIDFAST_ORIGIN || origin === VIDFAST_UPSTREAM_ORIGIN;
 }
 
 export function parseVidfastMessageData(data: unknown) {
