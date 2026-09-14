@@ -1,9 +1,14 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 
-import { MediaSummary, tmdbGet, toMediaSummary } from "../../lib/tmdb";
+import {
+  MediaSummary,
+  TmdbMediaPayload,
+  tmdbGet,
+  toMediaSummary,
+} from "../../lib/tmdb";
 
 type TmdbListResponse = {
-  results?: any[];
+  results?: TmdbMediaPayload[];
 };
 
 type HomeSection = {
@@ -11,6 +16,10 @@ type HomeSection = {
   title: string;
   items: MediaSummary[];
 };
+
+function compactMedia(items: Array<MediaSummary | null>, limit = 18): MediaSummary[] {
+  return items.filter((item): item is MediaSummary => Boolean(item)).slice(0, limit);
+}
 
 export default async function handler(
   req: NextApiRequest,
@@ -22,29 +31,24 @@ export default async function handler(
   }
 
   try {
-    const [movieTrend, tvTrend, popularMovies, onTheAir, animeShows] =
-      await Promise.all([
-        tmdbGet<TmdbListResponse>("/trending/movie/day"),
-        tmdbGet<TmdbListResponse>("/trending/tv/day"),
-        tmdbGet<TmdbListResponse>("/movie/popular"),
-        tmdbGet<TmdbListResponse>("/tv/on_the_air"),
-        tmdbGet<TmdbListResponse>("/discover/tv", {
-          with_genres: 16,
-          with_original_language: "ja",
-          sort_by: "popularity.desc",
-        }),
-      ]);
+    const [movieTrend, tvTrend, popularMovies, onTheAir, animeShows] = await Promise.all([
+      tmdbGet<TmdbListResponse>("/trending/movie/day"),
+      tmdbGet<TmdbListResponse>("/trending/tv/day"),
+      tmdbGet<TmdbListResponse>("/movie/popular"),
+      tmdbGet<TmdbListResponse>("/tv/on_the_air"),
+      tmdbGet<TmdbListResponse>("/discover/tv", {
+        with_genres: 16,
+        with_original_language: "ja",
+        sort_by: "popularity.desc",
+      }),
+    ]);
 
-    const trending = [
-      ...(movieTrend.results || [])
-        .map((item) => toMediaSummary(item, "movie"))
-        .filter(Boolean),
-      ...(tvTrend.results || [])
-        .map((item) => toMediaSummary(item, "tv"))
-        .filter(Boolean),
-    ]
-      .sort((a, b) => (b?.popularity || 0) - (a?.popularity || 0))
-      .slice(0, 18) as MediaSummary[];
+    const trending = compactMedia([
+      ...(movieTrend.results || []).map((item) => toMediaSummary(item, "movie")),
+      ...(tvTrend.results || []).map((item) => toMediaSummary(item, "tv")),
+    ])
+      .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
+      .slice(0, 18);
 
     const sections: HomeSection[] = [
       {
@@ -55,36 +59,26 @@ export default async function handler(
       {
         id: "movies",
         title: "Popular Movies",
-        items: ((popularMovies.results || [])
-          .map((item) => toMediaSummary(item, "movie"))
-          .filter(Boolean)
-          .slice(0, 18)) as MediaSummary[],
+        items: compactMedia(
+          (popularMovies.results || []).map((item) => toMediaSummary(item, "movie"))
+        ),
       },
       {
         id: "shows",
         title: "On The Air",
-        items: ((onTheAir.results || [])
-          .map((item) => toMediaSummary(item, "tv"))
-          .filter(Boolean)
-          .slice(0, 18)) as MediaSummary[],
+        items: compactMedia((onTheAir.results || []).map((item) => toMediaSummary(item, "tv"))),
       },
       {
         id: "anime",
         title: "Anime Spotlight",
-        items: ((animeShows.results || [])
-          .map((item) => toMediaSummary(item, "tv"))
-          .filter(Boolean)
-          .slice(0, 18)) as MediaSummary[],
+        items: compactMedia((animeShows.results || []).map((item) => toMediaSummary(item, "tv"))),
       },
     ];
 
-    return res.status(200).json({
-      hero: trending[0] || null,
-      sections,
-    });
-  } catch (error: any) {
+    return res.status(200).json({ hero: trending[0] || null, sections });
+  } catch (error) {
     return res.status(500).json({
-      error: error?.message || "Failed to load home feed.",
+      error: error instanceof Error ? error.message : "Failed to load home feed.",
     });
   }
 }
