@@ -1,12 +1,11 @@
-import { useRouter } from "next/router";
-import type { GetServerSideProps } from "next";
 import axios from "axios";
+import type { GetServerSideProps } from "next";
+import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import MediaDetailShell from "../../components/MediaDetailShell";
 import {
   buildVidfastMovieUrl,
   getVidfastMediaEntry,
-  logVidfastPlayerEvent,
   parseVidfastMessageData,
   toContinueProgress,
   VIDFAST_ORIGIN,
@@ -14,14 +13,7 @@ import {
 
 type MovieDetails = {
   title?: string;
-  overview?: string;
   poster_path?: string;
-  backdrop_path?: string;
-  vote_average?: number;
-  release_date?: string;
-  runtime?: number;
-  genres?: { id: number; name: string }[];
-  imdb_id?: string;
 };
 
 export const getServerSideProps: GetServerSideProps = async () => ({ props: {} });
@@ -35,15 +27,15 @@ export default function MovieDetailsPage() {
   useEffect(() => {
     if (!id) return;
 
-    const storageId = Array.isArray(id) ? id[0] : id;
-    const storageKey = `continue:movie:${storageId}`;
+    const mediaId = Array.isArray(id) ? id[0] : id;
+    const storageKey = `continue:movie:${mediaId}`;
 
     try {
-      const stored = window.localStorage.getItem(storageKey);
-      if (!stored) return;
+      const storedEntry = window.localStorage.getItem(storageKey);
+      if (!storedEntry) return;
 
-      const parsed = JSON.parse(stored) as { timestamp?: number };
-      const savedTimestamp = Math.floor(Number(parsed?.timestamp || 0));
+      const storedData = JSON.parse(storedEntry) as { timestamp?: number };
+      const savedTimestamp = Math.floor(Number(storedData.timestamp || 0));
       setResumeSeconds(savedTimestamp > 0 ? savedTimestamp : 0);
     } catch {
       setResumeSeconds(0);
@@ -53,26 +45,24 @@ export default function MovieDetailsPage() {
   useEffect(() => {
     if (!id) return;
 
-    const storageId = Array.isArray(id) ? id[0] : id;
-    const storageKey = `continue:movie:${storageId}`;
+    const mediaId = Array.isArray(id) ? id[0] : id;
+    const storageKey = `continue:movie:${mediaId}`;
 
     const handleProgressMessage = (event: MessageEvent) => {
       if (event.origin !== VIDFAST_ORIGIN) return;
 
-      const payload = parseVidfastMessageData(event.data) as { type?: string; data?: unknown } | null;
-      if (payload?.type === "PLAYER_EVENT") {
-        logVidfastPlayerEvent(payload.data);
-        return;
-      }
-      if (!payload || payload.type !== "MEDIA_DATA") return;
+      const message = parseVidfastMessageData(event.data) as {
+        type?: string;
+        data?: unknown;
+      } | null;
+      if (!message || message.type !== "MEDIA_DATA") return;
 
-      window.localStorage.setItem("vidFastProgress", JSON.stringify(payload.data));
+      window.localStorage.setItem("vidFastProgress", JSON.stringify(message.data));
 
-      const mediaEntry = getVidfastMediaEntry(payload.data, storageId);
+      const mediaEntry = getVidfastMediaEntry(message.data, mediaId);
       if (!mediaEntry || mediaEntry.type !== "movie") return;
 
       const { timestamp, duration, progress } = toContinueProgress(mediaEntry);
-
       window.localStorage.setItem(
         storageKey,
         JSON.stringify({
@@ -83,7 +73,7 @@ export default function MovieDetailsPage() {
           title: movie?.title || undefined,
           posterPath: movie?.poster_path || undefined,
           mediaType: "movie",
-          tmdbId: storageId,
+          tmdbId: mediaId,
         })
       );
     };
@@ -95,49 +85,45 @@ export default function MovieDetailsPage() {
   useEffect(() => {
     if (!id) return;
 
-    const fetchDetails = async () => {
+    const fetchMovie = async () => {
       const { data } = await axios.get(`https://api.themoviedb.org/3/movie/${id}`, {
-        params: {
-          api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY,
-        },
+        params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY },
       });
       setMovie(data);
     };
 
-    fetchDetails();
+    fetchMovie();
   }, [id]);
 
   useEffect(() => {
     if (!id || !movie) return;
 
-    const storageId = Array.isArray(id) ? id[0] : id;
-    const storageKey = `continue:movie:${storageId}`;
+    const mediaId = Array.isArray(id) ? id[0] : id;
+    const storageKey = `continue:movie:${mediaId}`;
+    const indexKey = "continueWatching:index";
 
     try {
-      const existing = window.localStorage.getItem(storageKey);
-      const parsed = existing ? JSON.parse(existing) : {};
+      const storedEntry = window.localStorage.getItem(storageKey);
+      const storedData = storedEntry ? JSON.parse(storedEntry) : {};
       window.localStorage.setItem(
         storageKey,
         JSON.stringify({
-          ...parsed,
-          title: movie.title || parsed.title,
-          posterPath: movie.poster_path || parsed.posterPath,
+          ...storedData,
+          title: movie.title || storedData.title,
+          posterPath: movie.poster_path || storedData.posterPath,
           mediaType: "movie",
-          tmdbId: storageId,
-          updatedAt: parsed.updatedAt || new Date().toISOString(),
+          tmdbId: mediaId,
+          updatedAt: storedData.updatedAt || new Date().toISOString(),
         })
       );
 
-      const indexKey = "continueWatching:index";
-      const indexRaw = window.localStorage.getItem(indexKey);
-      const index: string[] = indexRaw ? JSON.parse(indexRaw) : [];
-      const entry = `movie:${storageId}`;
-      const filtered = index.filter((e) => e !== entry);
-      filtered.unshift(entry);
-      window.localStorage.setItem(indexKey, JSON.stringify(filtered.slice(0, 50)));
-    } catch {
-      // Ignore storage errors.
-    }
+      const storedIndex = window.localStorage.getItem(indexKey);
+      const indexEntries: string[] = storedIndex ? JSON.parse(storedIndex) : [];
+      const indexEntry = `movie:${mediaId}`;
+      const updatedIndex = indexEntries.filter((entry) => entry !== indexEntry);
+      updatedIndex.unshift(indexEntry);
+      window.localStorage.setItem(indexKey, JSON.stringify(updatedIndex.slice(0, 50)));
+    } catch {}
   }, [id, movie]);
 
   if (!movie) return <div className="loading">Loading...</div>;
