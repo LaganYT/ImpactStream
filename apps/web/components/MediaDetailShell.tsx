@@ -1,9 +1,19 @@
 import { useCallback, useRef } from "react";
 
+const MEDIA_PROXY_PATH = "/api/vidfast-media-proxy";
+const VIDFAST_MEDIA_HOST_SUFFIXES = [".peakstorm.top"];
+
 type MediaDetailShellProps = {
   embedUrl: string;
   title?: string;
 };
+
+function shouldProxyMedia(url: URL) {
+  const hostname = url.hostname.toLowerCase();
+  return VIDFAST_MEDIA_HOST_SUFFIXES.some(
+    (suffix) => hostname === suffix.slice(1) || hostname.endsWith(suffix)
+  );
+}
 
 export default function MediaDetailShell({ embedUrl, title }: MediaDetailShellProps) {
   const frameRef = useRef<HTMLIFrameElement>(null);
@@ -23,6 +33,49 @@ export default function MediaDetailShell({ embedUrl, title }: MediaDetailShellPr
     } catch {
       frameWindow.open = () => null;
     }
+
+    const proxifyMediaUrl = (value: string | URL) => {
+      try {
+        const url = new URL(String(value), frameWindow.location.href);
+        if (!shouldProxyMedia(url)) return value;
+        return `${MEDIA_PROXY_PATH}?url=${encodeURIComponent(url.toString())}`;
+      } catch {
+        return value;
+      }
+    };
+
+    const nativeFetch = frameWindow.fetch.bind(frameWindow);
+    frameWindow.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+      if (input instanceof frameWindow.Request) {
+        const proxiedUrl = proxifyMediaUrl(input.url);
+        if (proxiedUrl !== input.url) {
+          input = new frameWindow.Request(String(proxiedUrl), input);
+        }
+      } else if (typeof input === "string" || input instanceof frameWindow.URL) {
+        input = proxifyMediaUrl(input) as string | URL;
+      }
+
+      return nativeFetch(input, init);
+    };
+
+    const nativeXhrOpen = frameWindow.XMLHttpRequest.prototype.open;
+    frameWindow.XMLHttpRequest.prototype.open = function (
+      method: string,
+      url: string | URL,
+      async?: boolean,
+      username?: string | null,
+      password?: string | null
+    ) {
+      const proxiedUrl = proxifyMediaUrl(url);
+      return nativeXhrOpen.call(
+        this,
+        method,
+        String(proxiedUrl),
+        async ?? true,
+        username ?? null,
+        password ?? null
+      );
+    };
 
     const blockExternalNavigation = (event: Event) => {
       const target = event.target;
