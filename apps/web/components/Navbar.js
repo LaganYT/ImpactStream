@@ -8,7 +8,7 @@ const NAV_ITEMS = [
   { href: "/live-tv", label: "Live TV", icon: FaTv },
 ];
 
-export default function Navbar({ query, setQuery, onSearch }) {
+export default function Navbar({ query, setQuery }) {
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -23,7 +23,6 @@ export default function Navbar({ query, setQuery, onSearch }) {
   const handleSearch = () => {
     if (query.trim()) {
       router.push(`/?query=${encodeURIComponent(query)}`);
-      onSearch();
     }
   };
 
@@ -39,7 +38,6 @@ export default function Navbar({ query, setQuery, onSearch }) {
       <div className="navbar-left">
         <Link href="/"><h1 className="logo">ImpactStream</h1></Link>
 
-        {/* Desktop Navigation */}
         <div className="nav-links desktop-nav">
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => (
             <Link
@@ -54,7 +52,6 @@ export default function Navbar({ query, setQuery, onSearch }) {
       </div>
 
       <div className="navbar-right">
-        {/* Desktop Search */}
         <div className="search-bar desktop-search">
           <input
             type="text"
@@ -71,7 +68,6 @@ export default function Navbar({ query, setQuery, onSearch }) {
           </button>
         </div>
 
-        {/* GitHub Link */}
         <a
           href="https://github.com/LaganYT/ImpactStream"
           target="_blank"
@@ -82,23 +78,21 @@ export default function Navbar({ query, setQuery, onSearch }) {
           <FaGithub size={20} />
         </a>
 
-        {/* Mobile Menu Button */}
         <button
           className="mobile-menu-button"
           onClick={toggleMobileMenu}
           aria-label="Toggle mobile menu"
           style={{
-            display: 'none', // Will be overridden by CSS media queries
-            minWidth: '44px',
-            minHeight: '44px'
+            display: "none",
+            minWidth: "44px",
+            minHeight: "44px",
           }}
         >
           {isMobileMenuOpen ? <FaTimes size={24} /> : <FaBars size={24} />}
         </button>
       </div>
 
-      {/* Mobile Menu */}
-      <div className={`mobile-menu ${isMobileMenuOpen ? 'mobile-menu-open' : ''}`}>
+      <div className={`mobile-menu ${isMobileMenuOpen ? "mobile-menu-open" : ""}`}>
         <div className="mobile-nav-links">
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => (
             <Link
@@ -125,10 +119,12 @@ export default function Navbar({ query, setQuery, onSearch }) {
               }
             }}
           />
-          <button onClick={() => {
-            handleSearch();
-            setIsMobileMenuOpen(false);
-          }}>
+          <button
+            onClick={() => {
+              handleSearch();
+              setIsMobileMenuOpen(false);
+            }}
+          >
             <FaSearch /> Search
           </button>
         </div>
