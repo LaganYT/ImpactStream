@@ -1,7 +1,15 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import axios from "axios";
-import { FaPlay, FaGlobe, FaYoutube, FaSearch, FaTv, FaChevronLeft, FaChevronRight } from "react-icons/fa";
+import {
+  FaChevronLeft,
+  FaChevronRight,
+  FaGlobe,
+  FaPlay,
+  FaSearch,
+  FaTv,
+  FaYoutube,
+} from "react-icons/fa";
 
 interface Channel {
   nanoid: string;
@@ -19,25 +27,26 @@ interface Channel {
 
 const DEFAULT_LANGUAGE = "eng";
 const DEFAULT_COUNTRY = "US";
+const CHANNELS_PER_PAGE = 50;
+const PAGE_WINDOW = 2;
 
-export default function LiveTV() {
+export default function LiveTvPage() {
   const router = useRouter();
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
   const [selectedLanguage, setSelectedLanguage] = useState(DEFAULT_LANGUAGE);
   const [selectedCountry, setSelectedCountry] = useState(DEFAULT_COUNTRY);
   const [selectedCategory, setSelectedCategory] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const channelsPerPage = 50;
 
   useEffect(() => {
     const fetchChannels = async () => {
       try {
-        const response = await axios.get('/api/live-tv');
+        const response = await axios.get<Channel[]>("/api/live-tv");
         setChannels(response.data);
       } catch (error) {
-        console.error('Error fetching channels:', error);
+        console.error("Error fetching channels:", error);
       } finally {
         setLoading(false);
       }
@@ -46,8 +55,12 @@ export default function LiveTV() {
     fetchChannels();
   }, []);
 
-  const filteredChannels = channels.filter(channel => {
-    const matchesSearch = channel.name.toLowerCase().includes(searchQuery.toLowerCase());
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedLanguage, selectedCountry, selectedCategory]);
+
+  const filteredChannels = channels.filter((channel) => {
+    const matchesSearch = channel.name.toLowerCase().includes(searchTerm.toLowerCase());
     const channelLanguages = channel.languages?.length ? channel.languages : [channel.language];
     const matchesLanguage = !selectedLanguage || channelLanguages.includes(selectedLanguage);
     const matchesCountry = !selectedCountry || channel.country === selectedCountry;
@@ -55,87 +68,79 @@ export default function LiveTV() {
     return matchesSearch && matchesLanguage && matchesCountry && matchesCategory;
   });
 
-  // Reset to first page when filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery, selectedLanguage, selectedCountry, selectedCategory]);
-
-  // Calculate pagination
-  const totalPages = Math.ceil(filteredChannels.length / channelsPerPage);
-  const startIndex = (currentPage - 1) * channelsPerPage;
-  const endIndex = startIndex + channelsPerPage;
-  const currentChannels = filteredChannels.slice(startIndex, endIndex);
+  const totalPages = Math.ceil(filteredChannels.length / CHANNELS_PER_PAGE);
+  const pageStart = (currentPage - 1) * CHANNELS_PER_PAGE;
+  const visibleChannels = filteredChannels.slice(pageStart, pageStart + CHANNELS_PER_PAGE);
 
   const languages = Array.from(
     new Set(
       channels
-        .flatMap(ch => ch.languages?.length ? ch.languages : [ch.language])
-        .filter(lang => !!lang)
+        .flatMap((channel) =>
+          channel.languages?.length ? channel.languages : [channel.language]
+        )
+        .filter(Boolean)
     )
   ).sort();
-  const countries = Array.from(new Set(channels.map(ch => ch.country).filter(country => !!country))).sort();
-  const categories = Array.from(new Set(channels.map(ch => ch.category).filter(category => !!category))).sort();
-  const hasActiveFilters = Boolean(searchQuery || selectedLanguage || selectedCountry || selectedCategory);
+  const countries = Array.from(
+    new Set(channels.map((channel) => channel.country).filter(Boolean))
+  ).sort();
+  const categories = Array.from(
+    new Set(channels.map((channel) => channel.category).filter(Boolean))
+  ).sort();
+  const hasActiveFilters = Boolean(
+    searchTerm || selectedLanguage || selectedCountry || selectedCategory
+  );
 
-  const handleChannelClick = (channel: Channel) => {
+  const openChannel = (channel: Channel) => {
     router.push(`/live-tv/${channel.nanoid}`);
   };
 
   const clearFilters = () => {
+    setSearchTerm("");
     setSelectedLanguage("");
     setSelectedCountry("");
     setSelectedCategory("");
-    setSearchQuery("");
   };
 
   const getChannelIcon = (channel: Channel) => {
-    if (channel.youtube_urls.length > 0 && channel.iptv_urls.length === 0) {
-      return <FaYoutube />;
-    }
-    if (channel.iptv_urls.length > 0 && channel.youtube_urls.length === 0) {
-      return <FaGlobe />;
-    }
+    if (channel.youtube_urls.length > 0 && channel.iptv_urls.length === 0) return <FaYoutube />;
+    if (channel.iptv_urls.length > 0 && channel.youtube_urls.length === 0) return <FaGlobe />;
     return <FaTv />;
   };
 
-  const handlePageChange = (page: number) => {
+  const changePage = (page: number) => {
     setCurrentPage(page);
-    // Scroll to top of channels grid
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // Generate pagination range with ellipsis
-  const getPageNumbers = () => {
-    const delta = 2; // Number of pages to show on each side of current page
-    const range: number[] = [];
-    const rangeWithDots: (number | string)[] = [];
+  const getPaginationItems = (): Array<number | "..."> => {
+    const middlePages: number[] = [];
+    const items: Array<number | "..."> = [];
 
-    for (let i = Math.max(2, currentPage - delta); i <= Math.min(totalPages - 1, currentPage + delta); i++) {
-      range.push(i);
+    for (
+      let page = Math.max(2, currentPage - PAGE_WINDOW);
+      page <= Math.min(totalPages - 1, currentPage + PAGE_WINDOW);
+      page += 1
+    ) {
+      middlePages.push(page);
     }
 
-    if (currentPage - delta > 2) {
-      rangeWithDots.push(1, '...');
-    } else {
-      rangeWithDots.push(1);
-    }
+    if (currentPage - PAGE_WINDOW > 2) items.push(1, "...");
+    else items.push(1);
 
-    rangeWithDots.push(...range);
+    items.push(...middlePages);
 
-    if (currentPage + delta < totalPages - 1) {
-      rangeWithDots.push('...', totalPages);
-    } else if (totalPages > 1) {
-      rangeWithDots.push(totalPages);
-    }
+    if (currentPage + PAGE_WINDOW < totalPages - 1) items.push("...", totalPages);
+    else if (totalPages > 1) items.push(totalPages);
 
-    return rangeWithDots;
+    return items;
   };
 
   if (loading) {
     return (
       <div className="page-shell">
         <div className="loading-container">
-          <div className="loading-spinner"></div>
+          <div className="loading-spinner" />
           <h2>Loading Live TV</h2>
           <p>Discovering channels from around the world...</p>
         </div>
@@ -161,8 +166,8 @@ export default function LiveTV() {
           <input
             type="text"
             placeholder="Search channels..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
             aria-label="Search channels"
           />
         </div>
@@ -170,36 +175,42 @@ export default function LiveTV() {
         <select
           className="toolbar-select"
           value={selectedLanguage}
-          onChange={(e) => setSelectedLanguage(e.target.value)}
+          onChange={(event) => setSelectedLanguage(event.target.value)}
           aria-label="Filter by language"
         >
           <option value="">All Languages</option>
-          {languages.map(lang => (
-            <option key={lang} value={lang}>{lang.toUpperCase()}</option>
+          {languages.map((language) => (
+            <option key={language} value={language}>
+              {language.toUpperCase()}
+            </option>
           ))}
         </select>
 
         <select
           className="toolbar-select"
           value={selectedCountry}
-          onChange={(e) => setSelectedCountry(e.target.value)}
+          onChange={(event) => setSelectedCountry(event.target.value)}
           aria-label="Filter by country"
         >
           <option value="">All Countries</option>
-          {countries.map(country => (
-            <option key={country} value={country}>{country.toUpperCase()}</option>
+          {countries.map((country) => (
+            <option key={country} value={country}>
+              {country.toUpperCase()}
+            </option>
           ))}
         </select>
 
         <select
           className="toolbar-select"
           value={selectedCategory}
-          onChange={(e) => setSelectedCategory(e.target.value)}
+          onChange={(event) => setSelectedCategory(event.target.value)}
           aria-label="Filter by category"
         >
           <option value="">All Categories</option>
-          {categories.map(category => (
-            <option key={category} value={category}>{category}</option>
+          {categories.map((category) => (
+            <option key={category} value={category}>
+              {category}
+            </option>
           ))}
         </select>
 
@@ -217,13 +228,12 @@ export default function LiveTV() {
         </p>
       ) : null}
 
-      {/* Channels Grid */}
       <div className="channels-grid">
-        {currentChannels.map((channel) => (
+        {visibleChannels.map((channel) => (
           <div
             key={channel.nanoid}
             className="channel-card"
-            onClick={() => handleChannelClick(channel)}
+            onClick={() => openChannel(channel)}
           >
             <div className="channel-card-top">
               <div className="channel-logo">{getChannelIcon(channel)}</div>
@@ -240,23 +250,21 @@ export default function LiveTV() {
             </div>
 
             <div className="channel-card-badges">
-              {channel.iptv_urls.length > 0 && (
+              {channel.iptv_urls.length > 0 ? (
                 <span className="source-badge iptv">
                   <FaGlobe />
                   IPTV ({channel.iptv_urls.length})
                 </span>
-              )}
-              {channel.youtube_urls.length > 0 && (
+              ) : null}
+              {channel.youtube_urls.length > 0 ? (
                 <span className="source-badge youtube">
                   <FaYoutube />
                   YouTube ({channel.youtube_urls.length})
                 </span>
-              )}
-              {channel.hasGuide && (
-                <span className="source-badge">
-                  Guide ({channel.guideCount || 1})
-                </span>
-              )}
+              ) : null}
+              {channel.hasGuide ? (
+                <span className="source-badge">Guide ({channel.guideCount || 1})</span>
+              ) : null}
             </div>
 
             <span className="channel-watch">
@@ -266,12 +274,11 @@ export default function LiveTV() {
         ))}
       </div>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
+      {totalPages > 1 ? (
         <div className="pagination">
           <button
             className="pagination-btn"
-            onClick={() => handlePageChange(currentPage - 1)}
+            onClick={() => changePage(currentPage - 1)}
             disabled={currentPage === 1}
           >
             <FaChevronLeft />
@@ -279,43 +286,42 @@ export default function LiveTV() {
           </button>
 
           <div className="page-numbers">
-            {getPageNumbers().map((page, index) => (
+            {getPaginationItems().map((item, index) => (
               <button
-                key={index}
-                className={`page-number ${page === currentPage ? 'active' : ''} ${page === '...' ? 'ellipsis' : ''}`}
+                key={`${item}-${index}`}
+                className={`page-number ${item === currentPage ? "active" : ""} ${item === "..." ? "ellipsis" : ""}`}
                 onClick={() => {
-                  if (typeof page === 'number') {
-                    handlePageChange(page);
-                  }
+                  if (typeof item === "number") changePage(item);
                 }}
               >
-                {page}
+                {item}
               </button>
             ))}
           </div>
 
           <button
             className="pagination-btn"
-            onClick={() => handlePageChange(currentPage + 1)}
+            onClick={() => changePage(currentPage + 1)}
             disabled={currentPage === totalPages}
           >
             Next
             <FaChevronRight />
           </button>
         </div>
-      )}
+      ) : null}
 
-      {/* No Results */}
-      {filteredChannels.length === 0 && (
+      {filteredChannels.length === 0 ? (
         <div className="no-results">
-          <div className="no-results-icon">📺</div>
+          <div className="no-results-icon">
+            <FaTv />
+          </div>
           <h3>No channels found</h3>
           <p>Try adjusting your search criteria or filters</p>
           <button className="clear-filters-btn" onClick={clearFilters}>
             Clear All Filters
           </button>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
