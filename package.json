@@ -7,7 +7,6 @@
     "dev:web": "pnpm --filter @impactstream/web dev",
     "dev:mobile": "pnpm --filter @impactstream/mobile start",
     "build": "turbo build",
-    "lint": "turbo lint",
     "typecheck": "turbo typecheck"
   },
   "devDependencies": {
