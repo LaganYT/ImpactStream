@@ -2,22 +2,17 @@ import type { NextApiRequest, NextApiResponse } from "next";
 
 type MediaType = "movie" | "tv" | "anime";
 
-const MOVIE_PROVIDERS: string[] = [
-  "https://vidfast.vc/movie/",
-];
+type MediaRequest = {
+  type: MediaType;
+  id: string;
+};
 
-const TV_PROVIDERS: string[] = [
-  "https://vidfast.vc/tv/",
-];
+const VIDFAST_BASE_URL = "https://vidfast.vc";
 
-function selectProviders(type: MediaType): string[] {
-  return type === "movie" ? MOVIE_PROVIDERS : TV_PROVIDERS;
-}
+function parseMediaRequest(req: NextApiRequest): MediaRequest | null {
+  const input = req.method === "GET" ? req.query : req.body ?? {};
+  const { path, type, id } = input;
 
-function parseInput(req: NextApiRequest): { type: MediaType; id: string } | null {
-  const { path, type, id } = req.method === "GET" ? req.query : (req.body ?? {});
-
-  // Accept combined path like "/movie/123", "tv/456", or "anime/789"
   if (typeof path === "string" && path.length > 0) {
     const match = path.match(/^\/?(movie|tv|anime)\/(\d+)/i);
     if (match) {
@@ -25,15 +20,23 @@ function parseInput(req: NextApiRequest): { type: MediaType; id: string } | null
     }
   }
 
-  // Accept separate type and id
-  if (typeof type === "string" && typeof id === "string") {
-    const lowered = type.toLowerCase();
-    if ((lowered === "movie" || lowered === "tv" || lowered === "anime") && id.trim()) {
-      return { type: lowered as MediaType, id: id.trim() };
-    }
-  }
+  if (typeof type !== "string" || typeof id !== "string") return null;
 
-  return null;
+  const mediaType = type.toLowerCase();
+  if (mediaType !== "movie" && mediaType !== "tv" && mediaType !== "anime") return null;
+  if (!id.trim()) return null;
+
+  return { type: mediaType, id: id.trim() };
+}
+
+function buildPlaybackUrl({ type, id }: MediaRequest) {
+  const pathType = type === "movie" ? "movie" : "tv";
+  return `${VIDFAST_BASE_URL}/${pathType}/${id}`;
+}
+
+function shouldIncludeAlternatives(req: NextApiRequest) {
+  const value = req.method === "GET" ? req.query.includeAlternatives : req.body?.includeAlternatives;
+  return value === "1" || value === "true" || value === "yes";
 }
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -42,34 +45,18 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     return res.status(405).json({ error: "Method Not Allowed" });
   }
 
-  const parsed = parseInput(req);
-  if (!parsed) {
+  const mediaRequest = parseMediaRequest(req);
+  if (!mediaRequest) {
     return res.status(400).json({
       error:
-        "Invalid input. Provide either ?path=/movie/{id} (or /tv/{id}, /anime/{id}) or ?type=movie&?id={id} (also supports POST JSON).",
+        "Invalid input. Provide either ?path=/movie/{id} (or /tv/{id}, /anime/{id}) or ?type=movie&id={id}. POST JSON is also supported.",
     });
   }
 
-  const { type, id } = parsed;
-  const providers = selectProviders(type);
-  const primary = providers[0] + id;
-
-  const includeAlternatives = (() => {
-    const q = (req.method === "GET" ? req.query.includeAlternatives : req.body?.includeAlternatives) as
-      | string
-      | undefined;
-    if (!q) return false;
-    return q === "1" || q === "true" || q === "yes";
-  })();
-
-  if (includeAlternatives) {
-    return res.status(200).json({
-      input: { type, id },
-      url: primary,
-      alternatives: providers.slice(1).map((base) => base + id),
-    });
+  const url = buildPlaybackUrl(mediaRequest);
+  if (shouldIncludeAlternatives(req)) {
+    return res.status(200).json({ input: mediaRequest, url, alternatives: [] });
   }
 
-  return res.status(200).json({ url: primary });
+  return res.status(200).json({ url });
 }
-
