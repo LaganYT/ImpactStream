@@ -178,6 +178,12 @@ function rewriteCss(css: string) {
   );
 }
 
+function rewriteJavaScript(source: string) {
+  return source
+    .replace(/(["'`])\/_next\//g, `$1${PROXY_PREFIX}/_next/`)
+    .replace(/https:\/\/vidfast\.vc\/_next\//g, `${PROXY_PREFIX}/_next/`);
+}
+
 function copyResponseHeaders(upstream: Response, res: NextApiResponse) {
   const passthrough = [
     "accept-ranges",
@@ -267,6 +273,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const css = rewriteCss(await upstream.text());
       res.setHeader("Content-Type", contentType);
       return res.status(upstream.status).send(css);
+    }
+
+    if (
+      contentType.includes("javascript") ||
+      contentType.includes("ecmascript") ||
+      contentType.includes("application/x-javascript")
+    ) {
+      const javascript = rewriteJavaScript(await upstream.text());
+      res.setHeader("Content-Type", contentType);
+      return res.status(upstream.status).send(javascript);
     }
 
     res.setHeader("Content-Type", contentType);
