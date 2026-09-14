@@ -147,13 +147,27 @@ function rewriteHtml(html: string) {
     },true);
   })();</script>`;
 
-  let rewritten = html
-    .replace(/https:\/\/vidfast\.vc(?=\/)/gi, PROXY_PREFIX)
-    .replace(/(["'])\/(?!\/|api\/vidfast-proxy\/)/g, `$1${PROXY_PREFIX}/`)
-    .replace(
-      /(<(?:script|link|img|source|video|audio|iframe|form)\b[^>]*\b(?:src|href|poster|action)=)(["'])(https:\/\/vidfast\.vc[^"']*)\2/gi,
-      (_match, start, quote, url) => `${start}${quote}${proxyUrl(url)}${quote}`
-    );
+  const rewriteAttribute = (
+    _match: string,
+    name: string,
+    quote: string,
+    value: string
+  ) => {
+    if (value.startsWith("//") || value.startsWith("data:") || value.startsWith("blob:")) {
+      return `${name}=${quote}${value}${quote}`;
+    }
+
+    if (value.startsWith("/") || value.startsWith(VIDFAST_ORIGIN)) {
+      return `${name}=${quote}${proxyUrl(value)}${quote}`;
+    }
+
+    return `${name}=${quote}${value}${quote}`;
+  };
+
+  let rewritten = html.replace(
+    /\b(src|href|poster|action)=(['"])([^'"]*)\2/gi,
+    rewriteAttribute
+  );
 
   const baseTag = `<base href="${PROXY_PREFIX}/">`;
   if (/<head[^>]*>/i.test(rewritten)) {
