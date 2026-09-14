@@ -1,1 +1,3 @@
-Add vidrock (vidrock.net) as a url 
+# TODO
+
+- Evaluate Vidrock (`vidrock.net`) as an additional playback source.

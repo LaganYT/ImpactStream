@@ -1,66 +1,78 @@
 # ImpactStream
 
-A way to stream your favorite movies and TV shows with the VIDEASY player.
+ImpactStream is a multi-platform streaming project organized as a pnpm monorepo.
 
-## Features
+## Apps
 
-- Search for movies, TV shows, and anime using The Movie Database (TMDB) API.
-- Stream content with [VIDEASY](https://player.videasy.to).
-- Movie URL format: `https://player.videasy.to/movie/{tmdbMovieId}`
-- TV URL format: `https://player.videasy.to/tv/{tmdbShowId}/{season}/{episode}`
-- Responsive and user-friendly interface.
-- Customizable player options.
+- `apps/web` — Next.js web app and API routes.
+- `apps/mobile` — Expo / React Native app for iOS and Android.
+- `apps/roku` — Roku SceneGraph / BrightScript app.
 
-## Getting Started
+## Shared code
 
-### Prerequisites
+- `packages/shared` — platform-neutral code that is genuinely reused by more than one app.
 
-- Node.js (v16 or higher)
-- npm or yarn
-- API key from [The Movie Database (TMDB)](https://developer.themoviedb.org/docs/getting-started)
+Keep UI, navigation, playback integrations, and device-specific behavior inside each app. Move code into `packages/shared` only when multiple apps actually consume it.
 
-### Installation
+## Requirements
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/LaganYT/ImpactStream.git
-   cd ImpactStream
-   ```
+- Node.js 22.13 or newer.
+- pnpm 12.
+- A TMDB API key.
 
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
+## Setup
 
-3. Create a `.env.local` file in the root directory and add your TMDB API key:
-   ```plaintext
-   NEXT_PUBLIC_TMDB_API_KEY=your_tmdb_api_key
-   ```
+```bash
+git clone https://github.com/LaganYT/ImpactStream.git
+cd ImpactStream
+pnpm install
+```
 
-4. Start the development server:
-   ```bash
-   npm run dev
-   ```
+Create `apps/web/.env.local`:
 
-5. Open your browser and navigate to `http://localhost:3000`.
+```env
+TMDB_API_KEY=your_tmdb_api_key
+NEXT_PUBLIC_TMDB_API_KEY=your_tmdb_api_key
+```
 
-## Usage
+Optional web configuration:
 
-1. Use the search bar on the homepage to search for movies or TV shows.
-2. Select a result to view details and open the embedded VIDEASY player.
-3. Optionally adjust player options via URL parameters.
+```env
+NEXT_PUBLIC_DOWNLOAD_API_URL=https://downloads.shegu.st
+```
 
-## Technologies Used
+## Development
 
-- [Next.js](https://nextjs.org/) - React framework for server-side rendering.
-- [Axios](https://axios-http.com/) - HTTP client for API requests.
-- [TMDB API](https://developer.themoviedb.org/) - For fetching movie, TV show, and anime data.
+Run commands from the repository root:
 
-## License
+```bash
+pnpm dev:web
+pnpm dev:mobile
+pnpm build
+pnpm typecheck
+```
 
-This project is licensed under the MIT License. See the LICENSE file for details.
+The Roku app uses Roku's native development and sideloading workflow rather than the JavaScript workspace runtime.
 
-## Acknowledgments
+## Repository structure
 
-- [TMDB](https://www.themoviedb.org/) for providing movie and TV show data.
-- [VIDEASY](https://player.videasy.to) for embedded playback.
+```text
+ImpactStream/
+├── apps/
+│   ├── mobile/
+│   ├── roku/
+│   └── web/
+├── packages/
+│   └── shared/
+├── package.json
+├── pnpm-workspace.yaml
+└── turbo.json
+```
+
+## Web app
+
+The web app provides movie, TV, anime, and live-TV browsing, TMDB metadata, embedded playback, continue-watching state, program-guide data, and direct download options where available.
+
+## Adding another platform
+
+Add JavaScript or TypeScript clients under `apps/<platform>` and use workspace packages with `workspace:*`. Platforms that cannot consume TypeScript directly should share API contracts while keeping their native UI and playback code platform-specific.

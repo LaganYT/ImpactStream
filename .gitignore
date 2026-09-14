@@ -1,11 +1,16 @@
 node_modules
 .next
+.expo
+.turbo
 .DS_Store
 .pnpm-store/
 tsconfig.tsbuildinfo
-tsconfig.json
 package-lock.json
 .env.local
 next-env.d.ts
 .env
-denemeflix-main
+*.log
+
+# Expo prebuild output
+apps/mobile/android/
+apps/mobile/ios/

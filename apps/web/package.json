@@ -1,0 +1,26 @@
+{
+  "name": "@impactstream/web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ImpactStream Next.js web application",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@videojs/themes": "^1.0.1",
+    "axios": "latest",
+    "next": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "react-icons": "latest",
+    "video.js": "^8.23.9"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "typescript": "latest"
+  }
+}
