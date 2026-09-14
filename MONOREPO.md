@@ -1,17 +1,20 @@
 # ImpactStream monorepo
 
-ImpactStream is organized as a pnpm workspace so each client can evolve independently while sharing platform-neutral contracts.
+ImpactStream is organized as a pnpm workspace so each platform can evolve independently while sharing code when it is actually reused.
 
-## Layout
+## Apps
 
-- `apps/web` — existing Next.js website and API routes.
+- `apps/web` — Next.js web app and API routes.
 - `apps/mobile` — Expo / React Native app for iOS and Android.
-- `apps/roku` — Roku SceneGraph / BrightScript client.
-- `packages/shared` — TypeScript types and cross-platform API helpers.
+- `apps/roku` — Roku SceneGraph / BrightScript app.
 
-Future clients can follow the same pattern, for example `apps/android-tv`, `apps/tvos`, or `apps/fire-tv`.
+## Packages
+
+- `packages/shared` — platform-neutral code that is currently shared between apps. Keep code here only once more than one app genuinely needs it.
 
 ## Commands
+
+Run commands from the repository root with pnpm:
 
 ```bash
 pnpm install
@@ -21,10 +24,8 @@ pnpm build
 pnpm typecheck
 ```
 
-The Roku client does not run through Node or Turbo; package and sideload `apps/roku` using the Roku developer workflow.
+The Roku app uses Roku's native toolchain rather than the JavaScript workspace runtime.
 
-## Architecture guidance
+## Adding another platform
 
-Keep HTTP contracts, media models, validation, and other platform-neutral logic in `packages/shared`. Keep rendering, navigation, playback integrations, filesystem access, and device APIs inside each app.
-
-The existing Next.js API routes currently remain in `apps/web/pages/api`. As native and TV clients mature, consider extracting those endpoints into a dedicated backend app or stable public API so every client can call the same service without depending on web-only page code.
+Add JavaScript/TypeScript apps under `apps/<platform>` and consume shared packages with `workspace:*`. Native platforms that cannot consume TypeScript directly should use the same backend/API contracts while keeping platform-specific UI and playback code inside their app directory.
