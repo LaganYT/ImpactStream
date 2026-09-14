@@ -3,6 +3,7 @@ import { Readable } from "node:stream";
 
 const VIDFAST_ORIGIN = "https://vidfast.vc";
 const PROXY_PREFIX = "/api/vidfast-proxy";
+const MEDIA_PROXY_PREFIX = "/api/vidfast-media-proxy";
 const COOKIE_PREFIX = "vf_";
 
 export const config = {
@@ -104,7 +105,7 @@ function rewriteCss(css: string) {
 }
 
 function rewriteJavaScript(source: string) {
-  const runtimeProxyShim = `;(()=>{if(window.__impactStreamVidfastRuntimeProxy)return;window.__impactStreamVidfastRuntimeProxy=true;const prefix=${JSON.stringify(PROXY_PREFIX)};const proxify=value=>{try{const url=new URL(String(value),window.location.origin);if(url.origin!==window.location.origin||url.pathname===prefix||url.pathname.startsWith(prefix+"/"))return value;return prefix+url.pathname+url.search+url.hash}catch{return value}};const nativeFetch=window.fetch;if(nativeFetch){window.fetch=function(input,init){if(input instanceof Request){const next=proxify(input.url);if(next!==input.url)input=new Request(next,input)}else if(typeof input==="string"||input instanceof URL){input=proxify(input)}return nativeFetch.call(this,input,init)}}const nativeXhrOpen=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(method,url){arguments[1]=proxify(url);return nativeXhrOpen.apply(this,arguments)}})();`;
+  const runtimeProxyShim = `;(()=>{if(window.__impactStreamVidfastRuntimeProxy)return;window.__impactStreamVidfastRuntimeProxy=true;const proxyPrefix=${JSON.stringify(PROXY_PREFIX)};const mediaPrefix=${JSON.stringify(MEDIA_PROXY_PREFIX)};const proxify=value=>{try{const url=new URL(String(value),window.location.origin);if(url.hostname==="peakstorm.top"||url.hostname.endsWith(".peakstorm.top"))return mediaPrefix+"?url="+encodeURIComponent(url.href);if(url.origin!==window.location.origin)return value;if(url.pathname===proxyPrefix||url.pathname.startsWith(proxyPrefix+"/")||url.pathname===mediaPrefix||url.pathname.startsWith(mediaPrefix+"/"))return value;return proxyPrefix+url.pathname+url.search+url.hash}catch{return value}};const nativeFetch=window.fetch;if(nativeFetch){window.fetch=function(input,init){if(input instanceof Request){const next=proxify(input.url);if(next!==input.url)input=new Request(next,input)}else if(typeof input==="string"||input instanceof URL){input=proxify(input)}return nativeFetch.call(this,input,init)}}const nativeXhrOpen=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(method,url){arguments[1]=proxify(url);return nativeXhrOpen.apply(this,arguments)}})();`;
 
   const rewritten = source
     .replace(/if\(!c5\(\)\)return;/g, "")
