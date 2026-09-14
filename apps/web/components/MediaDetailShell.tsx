@@ -7,8 +7,6 @@ export default function MediaDetailShell({ embedUrl, title }: MediaDetailShellPr
   return (
     <div className="watch-screen">
       <iframe
-        name="framez"
-        id="framez"
         src={embedUrl}
         title={title}
         allowFullScreen
