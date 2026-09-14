@@ -6,7 +6,6 @@ export type EpisodeInfo = {
   overview?: string;
   still_path?: string | null;
   runtime?: number | null;
-  air_date?: string;
 };
 
 type Props = {
