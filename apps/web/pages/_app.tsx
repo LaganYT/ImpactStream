@@ -13,18 +13,13 @@ export default function App({ Component, pageProps }: AppProps) {
   const [query, setQuery] = useState("");
   const isWatchRoute = WATCH_ROUTES.includes(router.pathname);
 
-  const onSearch = () => {
-    // Implement search logic or leave it as a placeholder
-    console.log("Search triggered with query:", query);
-  };
-
   useEffect(() => {
     document.body.classList.add("dark");
   }, []);
 
   return (
     <TitleModalProvider>
-      <Navbar query={query} setQuery={setQuery} onSearch={onSearch} />
+      <Navbar query={query} setQuery={setQuery} />
       <div className="app-content">
         <Component {...pageProps} />
       </div>
