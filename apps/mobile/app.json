@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "ImpactStream",
+    "slug": "impactstream",
+    "version": "1.0.0",
+    "orientation": "default",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.laganyt.impactstream"
+    },
+    "android": {
+      "package": "com.laganyt.impactstream"
+    }
+  }
+}

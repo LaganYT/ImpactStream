@@ -1,43 +1,16 @@
 {
   "name": "impactstream",
-  "version": "1.0.0",
-  "description": "A way to stream your favorite movies, TV shows, and anime using multiple streaming APIs.",
-  "main": "index.js",
+  "private": true,
+  "packageManager": "pnpm@10.17.1",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
-  },
-  "keywords": [
-    "streaming",
-    "movies",
-    "tv-shows",
-    "anime",
-    "nextjs"
-  ],
-  "author": "LaganYT",
-  "license": "MIT",
-  "dependencies": {
-    "@videojs/http-streaming": "^3.17.5",
-    "@videojs/themes": "^1.0.1",
-    "axios": "latest",
-    "crypto-js": "^4.2.0",
-    "hashids": "^2.3.0",
-    "hls.js": "^1.6.16",
-    "next": "latest",
-    "react": "latest",
-    "react-dom": "latest",
-    "react-icons": "latest",
-    "video.js": "^8.23.9",
-    "videojs-contrib-hls": "^5.15.0"
+    "dev": "turbo dev",
+    "dev:web": "pnpm --filter @impactstream/web dev",
+    "dev:mobile": "pnpm --filter @impactstream/mobile start",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck"
   },
   "devDependencies": {
-    "@types/crypto-js": "^4.2.2",
-    "@types/node": "latest",
-    "@types/react": "latest",
-    "eslint": "latest",
-    "eslint-config-next": "latest",
-    "typescript": "latest"
+    "turbo": "latest"
   }
 }
