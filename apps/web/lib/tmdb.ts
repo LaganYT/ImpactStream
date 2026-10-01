@@ -60,9 +60,9 @@ const TMDB_POSTER_BASE_URL = "https://image.tmdb.org/t/p/w500";
 const TMDB_BACKDROP_BASE_URL = "https://image.tmdb.org/t/p/original";
 
 export function getTmdbApiKey(): string {
-  const apiKey = process.env.TMDB_API_KEY || process.env.NEXT_PUBLIC_TMDB_API_KEY;
+  const apiKey = process.env.TMDB_API_KEY;
   if (!apiKey) {
-    throw new Error("TMDB API key is missing. Set TMDB_API_KEY or NEXT_PUBLIC_TMDB_API_KEY.");
+    throw new Error("TMDB API key is missing. Set TMDB_API_KEY.");
   }
 
   return apiKey;

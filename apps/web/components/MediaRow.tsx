@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { ReactNode, useRef } from "react";
 import { FaChevronLeft, FaChevronRight, FaPlay, FaStar } from "react-icons/fa";
 
 export type MediaRowItem = {
@@ -13,9 +13,10 @@ type Props = {
   title: string;
   items: MediaRowItem[];
   onItemClick: (item: MediaRowItem) => void;
+  action?: ReactNode;
 };
 
-export default function MediaRow({ title, items, onItemClick }: Props) {
+export default function MediaRow({ title, items, onItemClick, action }: Props) {
   const scrollerRef = useRef<HTMLDivElement>(null);
 
   const scrollByPage = (direction: -1 | 1) => {
@@ -30,6 +31,7 @@ export default function MediaRow({ title, items, onItemClick }: Props) {
     <div className="category media-row">
       <div className="media-row-header">
         <h3>{title}</h3>
+        {action}
       </div>
       <div className="media-row-body">
         <button

@@ -7,7 +7,11 @@ export default function Footer() {
         <span className="footer-brand">ImpactStream</span>
         <div className="footer-links">
           <Link href="/">Home</Link>
+          <Link href="/browse/movie">Movies</Link>
+          <Link href="/browse/tv">TV Shows</Link>
+          <Link href="/browse/anime">Anime</Link>
           <Link href="/live-tv">Live TV</Link>
+          <Link href="/my-list">My List</Link>
           <a
             href="https://github.com/LaganYT/ImpactStream"
             target="_blank"

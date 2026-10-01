@@ -1,12 +1,29 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { FaBars, FaGithub, FaHome, FaSearch, FaTimes, FaTv } from "react-icons/fa";
+import {
+  FaBars,
+  FaBookmark,
+  FaDragon,
+  FaFilm,
+  FaGithub,
+  FaHome,
+  FaSearch,
+  FaTimes,
+  FaTv,
+  FaVideo,
+} from "react-icons/fa";
 
 const NAV_ITEMS = [
   { href: "/", label: "Home", icon: FaHome },
+  { href: "/browse/movie", label: "Movies", icon: FaFilm },
+  { href: "/browse/tv", label: "TV Shows", icon: FaVideo },
+  { href: "/browse/anime", label: "Anime", icon: FaDragon },
   { href: "/live-tv", label: "Live TV", icon: FaTv },
+  { href: "/my-list", label: "My List", icon: FaBookmark },
 ];
+
+const SEARCH_DEBOUNCE_MS = 350;
 
 export default function Navbar({ searchTerm, setSearchTerm }) {
   const router = useRouter();
@@ -20,12 +37,42 @@ export default function Navbar({ searchTerm, setSearchTerm }) {
     return () => window.removeEventListener("scroll", updateScrollState);
   }, []);
 
-  const submitSearch = () => {
-    const normalizedSearchTerm = searchTerm.trim();
-    if (!normalizedSearchTerm) return;
+  const routeQuery = router.pathname === "/search" && typeof router.query.q === "string"
+    ? router.query.q
+    : "";
+  const lastPushedQuery = useRef(routeQuery);
 
-    router.push(`/?query=${encodeURIComponent(normalizedSearchTerm)}`);
+  // Keep the input in sync when the URL changes (back/forward, shared links).
+  useEffect(() => {
+    if (routeQuery !== lastPushedQuery.current) {
+      lastPushedQuery.current = routeQuery;
+      setSearchTerm(routeQuery);
+    }
+  }, [routeQuery, setSearchTerm]);
+
+  const goToSearch = (term, { replace = false } = {}) => {
+    const normalizedSearchTerm = term.trim();
+    if (!normalizedSearchTerm || normalizedSearchTerm === lastPushedQuery.current) return;
+
+    lastPushedQuery.current = normalizedSearchTerm;
+    const url = `/search?q=${encodeURIComponent(normalizedSearchTerm)}`;
+    if (replace) router.replace(url, undefined, { scroll: false });
+    else router.push(url);
   };
+
+  // Live search: results update as the viewer types. While already on the
+  // search page, replace history entries instead of stacking one per keystroke.
+  useEffect(() => {
+    if (!searchTerm.trim()) return;
+
+    const timeout = window.setTimeout(
+      () => goToSearch(searchTerm, { replace: router.pathname === "/search" }),
+      SEARCH_DEBOUNCE_MS
+    );
+    return () => window.clearTimeout(timeout);
+  }, [searchTerm]);
+
+  const submitSearch = () => goToSearch(searchTerm);
 
   const isActiveRoute = (href) =>
     href === "/" ? router.pathname === "/" : router.pathname.startsWith(href);
