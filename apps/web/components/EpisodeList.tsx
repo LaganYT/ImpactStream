@@ -10,7 +10,8 @@ export type EpisodeInfo = {
 
 type Props = {
   episodes: EpisodeInfo[];
-  seasonCount: number;
+  seasonCount?: number;
+  seasons?: number[];
   season: number;
   activeEpisode?: number;
   onSeasonChange: (season: number) => void;
@@ -21,7 +22,8 @@ type Props = {
 
 export default function EpisodeList({
   episodes,
-  seasonCount,
+  seasonCount = 1,
+  seasons,
   season,
   activeEpisode,
   onSeasonChange,
@@ -29,18 +31,22 @@ export default function EpisodeList({
   onEpisodeDownload,
   downloadingEpisode,
 }: Props) {
+  const seasonOptions = seasons?.length
+    ? seasons
+    : Array.from({ length: seasonCount }, (_, index) => index + 1);
+
   return (
     <section className="episodes-section">
       <div className="episodes-header">
         <h2>Episodes</h2>
-        {seasonCount > 1 ? (
+        {seasonOptions.length > 1 ? (
           <select
             className="season-select"
             value={season}
             onChange={(e) => onSeasonChange(Number(e.target.value))}
             aria-label="Select season"
           >
-            {Array.from({ length: seasonCount }, (_, i) => i + 1).map((s) => (
+            {seasonOptions.map((s) => (
               <option key={s} value={s}>
                 Season {s}
               </option>

@@ -32,8 +32,9 @@ Create `apps/web/.env.local`:
 
 ```env
 TMDB_API_KEY=your_tmdb_api_key
-NEXT_PUBLIC_TMDB_API_KEY=your_tmdb_api_key
 ```
+
+The TMDB key is only read on the server. The browser reaches TMDB through `/api/tmdb/*`, which forwards an allowlisted set of endpoints.
 
 Optional web configuration:
 

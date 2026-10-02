@@ -12,6 +12,6 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "typescript": "latest"
+    "typescript": "^7.0.2"
   }
 }

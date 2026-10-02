@@ -41,12 +41,13 @@ export function buildVidfastTvUrl(
   tmdbId: string,
   season: number,
   episode: number,
-  resumeSeconds = 0
+  resumeSeconds = 0,
+  autoNext = true
 ) {
   const query = new URLSearchParams({
     autoPlay: "true",
     nextButton: "true",
-    autoNext: "true",
+    autoNext: String(autoNext),
   });
   if (resumeSeconds > 0) query.set("startAt", String(resumeSeconds));
   return `${VIDFAST_ORIGIN}/tv/${tmdbId}/${season}/${episode}${appendQueryString(query)}`;

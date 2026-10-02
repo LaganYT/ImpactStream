@@ -1,4 +1,3 @@
-import axios from "axios";
 import { useRouter } from "next/router";
 import {
   ReactNode,
@@ -10,11 +9,22 @@ import {
   useRef,
   useState,
 } from "react";
-import { FaDownload, FaPlay, FaStar, FaTimes, FaVolumeMute, FaVolumeUp } from "react-icons/fa";
+import {
+  FaCheck,
+  FaDownload,
+  FaPlay,
+  FaPlus,
+  FaStar,
+  FaTimes,
+  FaVolumeMute,
+  FaVolumeUp,
+} from "react-icons/fa";
 import DownloadDialog from "./DownloadDialog";
 import EpisodeList, { EpisodeInfo } from "./EpisodeList";
 import { getMediaType, isAnimeItem, RoutableMediaItem } from "../utils/mediaRouting";
 import type { MediaDownloadRequest } from "../utils/sheguDownloader";
+import { useMyList } from "../utils/myList";
+import { tmdbFetch } from "../utils/tmdbClient";
 
 export type TitleRef = {
   id: number;
@@ -98,6 +108,7 @@ function TitleModal({
   const [isTrailerMuted, setIsTrailerMuted] = useState(true);
   const [downloadingEpisode, setDownloadingEpisode] = useState<number | null>(null);
   const [downloadRequest, setDownloadRequest] = useState<MediaDownloadRequest | null>(null);
+  const myList = useMyList();
 
   useEffect(() => {
     let cancelled = false;
@@ -110,15 +121,9 @@ function TitleModal({
 
     const fetchDetails = async () => {
       try {
-        const { data } = await axios.get(
-          `https://api.themoviedb.org/3/${titleRef.mediaType}/${titleRef.id}`,
-          {
-            params: {
-              api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY,
-              append_to_response: "credits,recommendations,videos",
-            },
-          }
-        );
+        const data = await tmdbFetch<TitleDetails>(`${titleRef.mediaType}/${titleRef.id}`, {
+          append_to_response: "credits,recommendations,videos",
+        });
         if (!cancelled) setDetails(data);
       } catch {
         if (!cancelled) onClose();
@@ -137,9 +142,8 @@ function TitleModal({
     let cancelled = false;
     const fetchSeason = async () => {
       try {
-        const { data } = await axios.get(
-          `https://api.themoviedb.org/3/tv/${titleRef.id}/season/${seasonNumber}`,
-          { params: { api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY } }
+        const data = await tmdbFetch<{ episodes?: EpisodeInfo[] }>(
+          `tv/${titleRef.id}/season/${seasonNumber}`
         );
         if (!cancelled) setEpisodes(Array.isArray(data.episodes) ? data.episodes : []);
       } catch {
@@ -240,6 +244,20 @@ function TitleModal({
     });
   };
 
+  const isInMyList = myList.isInList({ id: titleRef.id, mediaType: titleRef.mediaType });
+
+  const toggleMyList = () => {
+    myList.toggle({
+      id: titleRef.id,
+      mediaType: titleRef.mediaType,
+      isAnime,
+      title: title || "Untitled",
+      posterPath: details?.poster_path || null,
+      year: year || undefined,
+      rating: details?.vote_average,
+    });
+  };
+
   const cast = (details?.credits?.cast || []).slice(0, 5).map((person) => person.name);
   const genres = (details?.genres || []).slice(0, 5).map((genre) => genre.name);
   const recommendations = useMemo(
@@ -294,6 +312,15 @@ function TitleModal({
               <div className="tm-actions">
                 <button className="btn-play" onClick={handlePlay} disabled={!details}>
                   <FaPlay /> Play
+                </button>
+                <button
+                  className={isInMyList ? "btn-more-info btn-my-list active" : "btn-more-info btn-my-list"}
+                  onClick={toggleMyList}
+                  disabled={!details}
+                  aria-pressed={isInMyList}
+                  title={isInMyList ? "Remove from My List" : "Add to My List"}
+                >
+                  {isInMyList ? <FaCheck /> : <FaPlus />} My List
                 </button>
                 {details && titleRef.mediaType === "movie" ? (
                   <button

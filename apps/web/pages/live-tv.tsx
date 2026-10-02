@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import axios from "axios";
+import ProgramGuide from "../components/ProgramGuide";
 import {
   FaChevronLeft,
   FaChevronRight,
   FaGlobe,
+  FaList,
   FaPlay,
   FaSearch,
+  FaTh,
   FaTv,
   FaYoutube,
 } from "react-icons/fa";
@@ -39,6 +42,15 @@ export default function LiveTvPage() {
   const [selectedCountry, setSelectedCountry] = useState(DEFAULT_COUNTRY);
   const [selectedCategory, setSelectedCategory] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const view = router.query.view === "guide" ? "guide" : "channels";
+
+  const setView = (nextView: "channels" | "guide") => {
+    router.replace(
+      { pathname: "/live-tv", query: nextView === "guide" ? { view: "guide" } : {} },
+      undefined,
+      { shallow: true, scroll: false }
+    );
+  };
 
   useEffect(() => {
     const fetchChannels = async () => {
@@ -158,6 +170,22 @@ export default function LiveTvPage() {
             {countries.length} countries
           </p>
         </div>
+        <div className="browse-segment" role="group" aria-label="View">
+          <button
+            className={view === "channels" ? "discover-chip active" : "discover-chip"}
+            onClick={() => setView("channels")}
+            aria-pressed={view === "channels"}
+          >
+            <FaTh /> Channels
+          </button>
+          <button
+            className={view === "guide" ? "discover-chip active" : "discover-chip"}
+            onClick={() => setView("guide")}
+            aria-pressed={view === "guide"}
+          >
+            <FaList /> Guide
+          </button>
+        </div>
       </header>
 
       <div className="livetv-toolbar">
@@ -224,93 +252,99 @@ export default function LiveTvPage() {
       {hasActiveFilters ? (
         <p className="livetv-summary">
           {filteredChannels.length.toLocaleString()} of {channels.length.toLocaleString()} channels
-          {totalPages > 1 ? ` — page ${currentPage} of ${totalPages}` : ""}
+          {view === "channels" && totalPages > 1 ? ` — page ${currentPage} of ${totalPages}` : ""}
         </p>
       ) : null}
 
-      <div className="channels-grid">
-        {visibleChannels.map((channel) => (
-          <div
-            key={channel.nanoid}
-            className="channel-card"
-            onClick={() => openChannel(channel)}
-          >
-            <div className="channel-card-top">
-              <div className="channel-logo">{getChannelIcon(channel)}</div>
-              <div className="channel-card-titles">
-                <h3>{channel.name}</h3>
-                <p>
-                  {[channel.language, channel.country]
-                    .concat(channel.category ? [channel.category] : [])
-                    .filter(Boolean)
-                    .map((value) => value.toUpperCase())
-                    .join(" • ") || "Live channel"}
-                </p>
-              </div>
-            </div>
-
-            <div className="channel-card-badges">
-              {channel.iptv_urls.length > 0 ? (
-                <span className="source-badge iptv">
-                  <FaGlobe />
-                  IPTV ({channel.iptv_urls.length})
-                </span>
-              ) : null}
-              {channel.youtube_urls.length > 0 ? (
-                <span className="source-badge youtube">
-                  <FaYoutube />
-                  YouTube ({channel.youtube_urls.length})
-                </span>
-              ) : null}
-              {channel.hasGuide ? (
-                <span className="source-badge">Guide ({channel.guideCount || 1})</span>
-              ) : null}
-            </div>
-
-            <span className="channel-watch">
-              <FaPlay size={11} /> Watch now
-            </span>
-          </div>
-        ))}
-      </div>
-
-      {totalPages > 1 ? (
-        <div className="pagination">
-          <button
-            className="pagination-btn"
-            onClick={() => changePage(currentPage - 1)}
-            disabled={currentPage === 1}
-          >
-            <FaChevronLeft />
-            Previous
-          </button>
-
-          <div className="page-numbers">
-            {getPaginationItems().map((item, index) => (
-              <button
-                key={`${item}-${index}`}
-                className={`page-number ${item === currentPage ? "active" : ""} ${item === "..." ? "ellipsis" : ""}`}
-                onClick={() => {
-                  if (typeof item === "number") changePage(item);
-                }}
+      {view === "guide" ? (
+        <ProgramGuide channels={filteredChannels.filter((channel) => channel.hasGuide)} />
+      ) : (
+        <>
+          <div className="channels-grid">
+            {visibleChannels.map((channel) => (
+              <div
+                key={channel.nanoid}
+                className="channel-card"
+                onClick={() => openChannel(channel)}
               >
-                {item}
-              </button>
+                <div className="channel-card-top">
+                  <div className="channel-logo">{getChannelIcon(channel)}</div>
+                  <div className="channel-card-titles">
+                    <h3>{channel.name}</h3>
+                    <p>
+                      {[channel.language, channel.country]
+                        .concat(channel.category ? [channel.category] : [])
+                        .filter(Boolean)
+                        .map((value) => value.toUpperCase())
+                        .join(" • ") || "Live channel"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="channel-card-badges">
+                  {channel.iptv_urls.length > 0 ? (
+                    <span className="source-badge iptv">
+                      <FaGlobe />
+                      IPTV ({channel.iptv_urls.length})
+                    </span>
+                  ) : null}
+                  {channel.youtube_urls.length > 0 ? (
+                    <span className="source-badge youtube">
+                      <FaYoutube />
+                      YouTube ({channel.youtube_urls.length})
+                    </span>
+                  ) : null}
+                  {channel.hasGuide ? (
+                    <span className="source-badge">Guide ({channel.guideCount || 1})</span>
+                  ) : null}
+                </div>
+
+                <span className="channel-watch">
+                  <FaPlay size={11} /> Watch now
+                </span>
+              </div>
             ))}
           </div>
 
-          <button
-            className="pagination-btn"
-            onClick={() => changePage(currentPage + 1)}
-            disabled={currentPage === totalPages}
-          >
-            Next
-            <FaChevronRight />
-          </button>
-        </div>
-      ) : null}
+          {totalPages > 1 ? (
+            <div className="pagination">
+              <button
+                className="pagination-btn"
+                onClick={() => changePage(currentPage - 1)}
+                disabled={currentPage === 1}
+              >
+                <FaChevronLeft />
+                Previous
+              </button>
 
-      {filteredChannels.length === 0 ? (
+              <div className="page-numbers">
+                {getPaginationItems().map((item, index) => (
+                  <button
+                    key={`${item}-${index}`}
+                    className={`page-number ${item === currentPage ? "active" : ""} ${item === "..." ? "ellipsis" : ""}`}
+                    onClick={() => {
+                      if (typeof item === "number") changePage(item);
+                    }}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                className="pagination-btn"
+                onClick={() => changePage(currentPage + 1)}
+                disabled={currentPage === totalPages}
+              >
+                Next
+                <FaChevronRight />
+              </button>
+            </div>
+          ) : null}
+        </>
+      )}
+
+      {view === "channels" && filteredChannels.length === 0 ? (
         <div className="no-results">
           <div className="no-results-icon">
             <FaTv />

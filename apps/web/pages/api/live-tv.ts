@@ -1,5 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
+import { getGuideSourceUrl, IptvGuide } from '../../lib/iptvGuides';
+
 type IptvStream = {
   channel: string | null;
   feed: string | null;
@@ -33,19 +35,6 @@ type IptvLogo = {
   url: string;
 };
 
-type IptvGuide = {
-  channel: string | null;
-  feed: string | null;
-  site: string;
-  site_id: string;
-  site_name: string;
-  lang: string;
-  sources: {
-    host: string;
-    url: string;
-    format: string;
-  }[];
-};
 
 type LiveTvChannel = {
   nanoid: string;
@@ -191,6 +180,7 @@ export default async function handler(
       const streamUrls = getStreamUrls(channelId, channelStreams);
       const country = toCountryCode(channel.country);
       const guides = guidesByChannel.get(channelId) || [];
+      const downloadableGuides = guides.filter((guide) => getGuideSourceUrl(guide));
       const guideSites = Array.from(new Set(guides.map((guide) => guide.site))).sort();
       const guideLanguages = Array.from(new Set(guides.map((guide) => guide.lang))).sort();
 
@@ -208,8 +198,8 @@ export default async function handler(
         ),
         stream_urls: streamUrls,
         logo: logosByChannel.get(channelId),
-        hasGuide: guides.length > 0,
-        guideCount: guides.length,
+        hasGuide: downloadableGuides.length > 0,
+        guideCount: downloadableGuides.length,
         guideSites,
         guideLanguages,
       });

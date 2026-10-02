@@ -1,18 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
-type IptvGuide = {
-  channel: string | null;
-  feed: string | null;
-  site: string;
-  site_id: string;
-  site_name: string;
-  lang: string;
-  sources: {
-    host: string;
-    url: string;
-    format: string;
-  }[];
-};
+import { getGuideSourceUrl, IptvGuide } from '../../lib/iptvGuides';
 
 type GuideProgram = {
   channel: string;
@@ -24,6 +12,35 @@ type GuideProgram = {
 };
 
 const IPTV_ORG_GUIDES_URL = 'https://iptv-org.github.io/api/guides.json';
+const GUIDE_INDEX_TTL_MS = 60 * 60 * 1000;
+const MAX_PROGRAMS_PER_CHANNEL = 30;
+const MAX_BATCH_CHANNELS = 20;
+
+type ChannelGuideResult = {
+  guides: IptvGuide[];
+  programs: GuideProgram[];
+};
+
+// guides.json is ~25 MB, so keep the per-channel index in memory between
+// requests on a warm instance instead of downloading it every time.
+let guideIndexCache: { expiresAt: number; byChannel: Map<string, IptvGuide[]> } | null = null;
+
+const getGuideIndex = async () => {
+  if (guideIndexCache && guideIndexCache.expiresAt > Date.now()) {
+    return guideIndexCache.byChannel;
+  }
+
+  const byChannel = new Map<string, IptvGuide[]>();
+  for (const guide of await fetchJson<IptvGuide[]>(IPTV_ORG_GUIDES_URL)) {
+    if (!guide.channel) continue;
+    const channelGuides = byChannel.get(guide.channel) || [];
+    channelGuides.push(guide);
+    byChannel.set(guide.channel, channelGuides);
+  }
+
+  guideIndexCache = { expiresAt: Date.now() + GUIDE_INDEX_TTL_MS, byChannel };
+  return byChannel;
+};
 
 const fetchJson = async <T>(url: string): Promise<T> => {
   const response = await fetch(url);
@@ -65,54 +82,59 @@ const matchesProgramChannel = (channel: string, channelIds: Set<string>) => {
   return Array.from(channelIds).some((id) => id.startsWith('-') && channel.endsWith(id));
 };
 
-const parseXmlTvPrograms = (xml: string, channelIds: Set<string>) => {
-  const programs: GuideProgram[] = [];
+// Parses an XMLTV document once and buckets upcoming programmes by requested channel.
+const parseXmlTvPrograms = (xml: string, channelIdSets: Map<string, Set<string>>) => {
+  const programsByChannel = new Map<string, GuideProgram[]>();
   const programmePattern = /<programme\s+([^>]*)>([\s\S]*?)<\/programme>/gi;
+  const now = Date.now();
   let match: RegExpExecArray | null;
 
   while ((match = programmePattern.exec(xml)) !== null) {
     const attributes = match[1];
-    const body = match[2];
     const channelMatch = attributes.match(/channel="([^"]+)"/i);
+    const channel = channelMatch ? decodeXml(channelMatch[1]) : '';
+    if (!channel) continue;
+
+    const requestedChannels = Array.from(channelIdSets.entries())
+      .filter(([, channelIds]) => matchesProgramChannel(channel, channelIds))
+      .map(([requestedChannel]) => requestedChannel);
+    if (requestedChannels.length === 0) continue;
+
     const startMatch = attributes.match(/start="([^"]+)"/i);
     const stopMatch = attributes.match(/stop="([^"]+)"/i);
-    const channel = channelMatch ? decodeXml(channelMatch[1]) : '';
+    const start = startMatch ? parseXmlTvDate(startMatch[1]) : '';
+    const stop = stopMatch ? parseXmlTvDate(stopMatch[1]) : '';
 
-    if (!channel || !matchesProgramChannel(channel, channelIds)) {
-      continue;
-    }
+    // EPG files often start days in the past; only keep what hasn't finished.
+    if (!start || (stop && new Date(stop).getTime() <= now)) continue;
 
-    programs.push({
+    const body = match[2];
+    const program: GuideProgram = {
       channel,
       title: getXmlText(body, 'title') || 'Untitled',
       description: getXmlText(body, 'desc'),
-      start: startMatch ? parseXmlTvDate(startMatch[1]) : '',
-      stop: stopMatch ? parseXmlTvDate(stopMatch[1]) : '',
+      start,
+      stop,
       category: getXmlText(body, 'category'),
-    });
+    };
+
+    for (const requestedChannel of requestedChannels) {
+      const programs = programsByChannel.get(requestedChannel) || [];
+      programs.push(program);
+      programsByChannel.set(requestedChannel, programs);
+    }
   }
 
-  return programs
-    .filter((program) => program.start)
-    .sort((a, b) => a.start.localeCompare(b.start))
-    .slice(0, 30);
+  programsByChannel.forEach((programs, channel) => {
+    programsByChannel.set(
+      channel,
+      programs.sort((a, b) => a.start.localeCompare(b.start)).slice(0, MAX_PROGRAMS_PER_CHANNEL)
+    );
+  });
+
+  return programsByChannel;
 };
 
-const getSourceUrl = (guide: IptvGuide) =>
-  guide.sources.find((source) => source.format === 'XML')?.url ||
-  guide.sources.find((source) => source.format === 'JSON')?.url ||
-  guide.sources[0]?.url;
-
-const getDerivedSourceUrl = (guide: IptvGuide) => {
-  if (guide.site !== 'i.mjh.nz') {
-    return undefined;
-  }
-
-  const [sourcePath] = guide.site_id.split('#');
-  return sourcePath ? `https://i.mjh.nz/${sourcePath}.xml` : undefined;
-};
-
-const getGuideSourceUrl = (guide: IptvGuide) => getSourceUrl(guide) || getDerivedSourceUrl(guide);
 
 const getGuideChannelIds = (channelId: string, guide: IptvGuide) => {
   const [, guideChannelId = guide.site_id] = guide.site_id.split('#');
@@ -129,56 +151,104 @@ const getGuideChannelIds = (channelId: string, guide: IptvGuide) => {
   ].filter(Boolean));
 };
 
+// Resolves guides for several channels, downloading each EPG source at most
+// once. A channel falls through to its next source only if earlier ones had
+// no programmes for it.
+const loadChannelGuides = async (channelIds: string[]) => {
+  const guideIndex = await getGuideIndex();
+  const results = new Map<string, ChannelGuideResult>(
+    channelIds.map((channelId) => [channelId, { guides: guideIndex.get(channelId) || [], programs: [] }])
+  );
+  const fetchedSources = new Map<string, string | null>();
+  const maxGuides = Math.max(0, ...channelIds.map((channelId) => results.get(channelId)!.guides.length));
+
+  for (let attempt = 0; attempt < maxGuides; attempt += 1) {
+    const pendingBySource = new Map<string, Map<string, Set<string>>>();
+
+    for (const channelId of channelIds) {
+      const result = results.get(channelId)!;
+      if (result.programs.length > 0) continue;
+
+      const sourceGuide = result.guides.filter((guide) => getGuideSourceUrl(guide))[attempt];
+      const sourceUrl = sourceGuide && getGuideSourceUrl(sourceGuide);
+      if (!sourceGuide || !sourceUrl) continue;
+
+      const channelSets = pendingBySource.get(sourceUrl) || new Map<string, Set<string>>();
+      channelSets.set(channelId, getGuideChannelIds(channelId, sourceGuide));
+      pendingBySource.set(sourceUrl, channelSets);
+    }
+
+    if (pendingBySource.size === 0) break;
+
+    await Promise.all(
+      Array.from(pendingBySource.entries()).map(async ([sourceUrl, channelSets]) => {
+        if (!fetchedSources.has(sourceUrl)) {
+          try {
+            const response = await fetch(sourceUrl);
+            fetchedSources.set(sourceUrl, response.ok ? await response.text() : null);
+          } catch {
+            fetchedSources.set(sourceUrl, null);
+          }
+        }
+
+        const xml = fetchedSources.get(sourceUrl);
+        if (!xml) return;
+
+        parseXmlTvPrograms(xml, channelSets).forEach((programs, channelId) => {
+          results.get(channelId)!.programs = programs;
+        });
+      })
+    );
+  }
+
+  return results;
+};
+
+const toGuideSummary = (guide: IptvGuide) => ({
+  feed: guide.feed,
+  site: guide.site,
+  siteId: guide.site_id,
+  siteName: guide.site_name,
+  language: guide.lang,
+  hasSource: Boolean(getGuideSourceUrl(guide)),
+});
+
+const firstQueryValue = (value: string | string[] | undefined) =>
+  Array.isArray(value) ? value[0] : value;
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
     return res.status(405).json({ message: 'Method not allowed' });
   }
 
-  const channelParam = req.query.channel;
-  const channelId = Array.isArray(channelParam) ? channelParam[0] : channelParam;
+  const channelId = firstQueryValue(req.query.channel);
+  const batchParam = firstQueryValue(req.query.channels);
+  const batchChannelIds = Array.from(
+    new Set((batchParam || '').split(',').map((value) => value.trim()).filter(Boolean))
+  ).slice(0, MAX_BATCH_CHANNELS);
 
-  if (!channelId) {
+  if (!channelId && batchChannelIds.length === 0) {
     return res.status(400).json({ message: 'Missing channel id' });
   }
 
   try {
-    const guides = (await fetchJson<IptvGuide[]>(IPTV_ORG_GUIDES_URL)).filter(
-      (guide) => guide.channel === channelId
-    );
-    const sourceGuides = guides.filter((guide) => getGuideSourceUrl(guide));
-    let programs: GuideProgram[] = [];
+    res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=3600');
 
-    for (const sourceGuide of sourceGuides) {
-      const sourceUrl = getGuideSourceUrl(sourceGuide);
-
-      if (sourceUrl) {
-        const response = await fetch(sourceUrl);
-        if (response.ok) {
-          const text = await response.text();
-          const channelIds = getGuideChannelIds(channelId, sourceGuide);
-          programs = parseXmlTvPrograms(text, channelIds);
-          if (programs.length > 0) {
-            break;
-          }
-        }
-      }
+    if (channelId) {
+      const result = (await loadChannelGuides([channelId])).get(channelId)!;
+      return res.status(200).json({
+        channel: channelId,
+        guides: result.guides.map(toGuideSummary),
+        programs: result.programs,
+      });
     }
 
-    res
-      .setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=3600')
-      .status(200)
-      .json({
-        channel: channelId,
-        guides: guides.map((guide) => ({
-          feed: guide.feed,
-          site: guide.site,
-          siteId: guide.site_id,
-          siteName: guide.site_name,
-          language: guide.lang,
-          hasSource: Boolean(getGuideSourceUrl(guide)),
-        })),
-        programs,
-      });
+    const results = await loadChannelGuides(batchChannelIds);
+    return res.status(200).json({
+      channels: Object.fromEntries(
+        batchChannelIds.map((id) => [id, { programs: results.get(id)!.programs }])
+      ),
+    });
   } catch (error) {
     console.error('Error fetching live TV guide:', error);
     res.status(500).json({ message: 'Failed to fetch guide' });
