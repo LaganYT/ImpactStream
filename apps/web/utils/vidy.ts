@@ -1,16 +1,14 @@
-export const VIDFAST_ORIGIN = "https://vidfast.vc";
+export const VIDY_ORIGIN = "https://www.vidy.st";
 
-type VidfastMediaType = "movie" | "tv";
+type VidyMediaType = "movie" | "tv";
 
-type VidfastProgress = {
+type VidyProgress = {
   watched?: number;
   duration?: number;
 };
 
-type VidfastMediaEntry = {
-  id?: number | string;
-  type?: VidfastMediaType | "anime";
-  progress?: VidfastProgress;
+type VidyMediaEntry = {
+  progress?: VidyProgress;
   last_season_watched?: number | string;
   last_episode_watched?: number | string;
   show_progress?: Record<
@@ -18,7 +16,7 @@ type VidfastMediaEntry = {
     {
       season?: number | string;
       episode?: number | string;
-      progress?: VidfastProgress;
+      progress?: VidyProgress;
     }
   >;
 };
@@ -31,13 +29,13 @@ export type ContinueProgressPayload = {
   episodeNumber?: number;
 };
 
-export function buildVidfastMovieUrl(tmdbId: string, resumeSeconds = 0) {
-  const query = new URLSearchParams({ autoPlay: "true" });
-  if (resumeSeconds > 0) query.set("startAt", String(resumeSeconds));
-  return `${VIDFAST_ORIGIN}/movie/${tmdbId}${appendQueryString(query)}`;
+export function buildVidyMovieUrl(tmdbId: string, resumeSeconds = 0) {
+  const query = new URLSearchParams({ autoplay: "true" });
+  if (resumeSeconds > 0) query.set("progress", String(resumeSeconds));
+  return `${VIDY_ORIGIN}/movie/${tmdbId}${appendQueryString(query)}`;
 }
 
-export function buildVidfastTvUrl(
+export function buildVidyTvUrl(
   tmdbId: string,
   season: number,
   episode: number,
@@ -45,15 +43,16 @@ export function buildVidfastTvUrl(
   autoNext = true
 ) {
   const query = new URLSearchParams({
-    autoPlay: "true",
-    nextButton: "true",
-    autoNext: String(autoNext),
+    autoplay: "true",
+    nextEpisode: "true",
+    autoplayNextEpisode: String(autoNext),
   });
-  if (resumeSeconds > 0) query.set("startAt", String(resumeSeconds));
-  return `${VIDFAST_ORIGIN}/tv/${tmdbId}/${season}/${episode}${appendQueryString(query)}`;
+  if (resumeSeconds > 0) query.set("progress", String(resumeSeconds));
+  return `${VIDY_ORIGIN}/tv/${tmdbId}/${season}/${episode}${appendQueryString(query)}`;
 }
 
-export function parseVidfastMessageData(data: unknown) {
+// Vidy posts JSON strings; MEDIA_DATA's `data` is itself the serialized watch history.
+export function parseVidyMessageData(data: unknown) {
   if (typeof data === "string") {
     try {
       return JSON.parse(data);
@@ -65,23 +64,18 @@ export function parseVidfastMessageData(data: unknown) {
   return data && typeof data === "object" ? data : null;
 }
 
-export function getVidfastMediaEntry(
+// History is keyed `${mediaType}-${tmdbId}`.
+export function getVidyMediaEntry(
   mediaData: unknown,
+  mediaType: VidyMediaType,
   mediaId: string | number
-): VidfastMediaEntry | null {
-  if (!mediaData || typeof mediaData !== "object") return null;
-
-  const entriesById = mediaData as Record<string, VidfastMediaEntry>;
-  const directEntry = entriesById[String(mediaId)];
-  if (directEntry) return directEntry;
-
-  return (
-    Object.values(entriesById).find((entry) => String(entry?.id) === String(mediaId)) || null
-  );
+): VidyMediaEntry | null {
+  const history = parseVidyMessageData(mediaData) as Record<string, VidyMediaEntry> | null;
+  return history?.[`${mediaType}-${mediaId}`] || null;
 }
 
 export function toContinueProgress(
-  entry: VidfastMediaEntry,
+  entry: VidyMediaEntry,
   fallbackSeason = 1,
   fallbackEpisode = 1
 ): ContinueProgressPayload {

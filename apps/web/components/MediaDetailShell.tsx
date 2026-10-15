@@ -10,7 +10,7 @@ export default function MediaDetailShell({ embedUrl, title }: MediaDetailShellPr
         src={embedUrl}
         title={title}
         allowFullScreen
-        allow="autoplay; fullscreen; picture-in-picture"
+        allow="encrypted-media; autoplay *; fullscreen *; picture-in-picture"
         className="watch-frame"
       />
     </div>
