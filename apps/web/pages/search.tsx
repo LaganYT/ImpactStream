@@ -4,54 +4,25 @@ import PosterGrid from "../components/PosterGrid";
 import { useTitleModal } from "../components/TitleModal";
 import {
   appendUnique,
+  flattenSearchResults,
+  matchesType,
+  TYPE_FILTERS,
+  TypeFilter,
   mediaItemKey,
   TmdbListItem,
   TmdbPage,
   toPosterGridItem,
   toTitleRef,
 } from "../utils/mediaItems";
-import { getMediaType, isAnimeItem } from "../utils/mediaRouting";
 import { tmdbFetch } from "../utils/tmdbClient";
-
-type FilterType = "all" | "movie" | "tv" | "anime";
-
-const FILTERS: { id: FilterType; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "movie", label: "Movies" },
-  { id: "tv", label: "TV Shows" },
-  { id: "anime", label: "Anime" },
-];
-
-type MultiSearchResult = TmdbListItem & {
-  known_for?: TmdbListItem[];
-};
-
-// TMDB multi-search also returns people; surface the titles they're known for
-// instead of the person, so searching an actor still finds their work.
-function flattenResults(results: MultiSearchResult[]): TmdbListItem[] {
-  return results.flatMap((result) => {
-    if (result.media_type === "person") {
-      return (result.known_for || []).filter(
-        (item) => item.media_type === "movie" || item.media_type === "tv"
-      );
-    }
-    return result.media_type === "movie" || result.media_type === "tv" ? [result] : [];
-  });
-}
-
-const matchesFilter = (item: TmdbListItem, filter: FilterType) => {
-  if (filter === "all") return true;
-  if (filter === "anime") return isAnimeItem(item);
-  return getMediaType(item) === filter;
-};
 
 export default function SearchPage() {
   const router = useRouter();
   const { openTitle } = useTitleModal();
   const query = typeof router.query.q === "string" ? router.query.q.trim() : "";
   const filterParam = router.query.type;
-  const activeFilter: FilterType = FILTERS.some((filter) => filter.id === filterParam)
-    ? (filterParam as FilterType)
+  const activeFilter: TypeFilter = TYPE_FILTERS.some((filter) => filter.id === filterParam)
+    ? (filterParam as TypeFilter)
     : "all";
 
   const [results, setResults] = useState<TmdbListItem[]>([]);
@@ -71,10 +42,10 @@ export default function SearchPage() {
 
     let cancelled = false;
     setIsLoading(true);
-    tmdbFetch<TmdbPage<MultiSearchResult>>("search/multi", { query, page: 1 })
+    tmdbFetch<TmdbPage>("search/multi", { query, page: 1 })
       .then((data) => {
         if (cancelled) return;
-        setResults(appendUnique([], flattenResults(data.results || [])));
+        setResults(appendUnique([], flattenSearchResults(data.results || [])));
         setTotalPages(data.total_pages || 0);
       })
       .catch(() => {
@@ -93,11 +64,11 @@ export default function SearchPage() {
     const nextPage = page + 1;
     setIsLoading(true);
     try {
-      const data = await tmdbFetch<TmdbPage<MultiSearchResult>>("search/multi", {
+      const data = await tmdbFetch<TmdbPage>("search/multi", {
         query,
         page: nextPage,
       });
-      setResults((current) => appendUnique(current, flattenResults(data.results || [])));
+      setResults((current) => appendUnique(current, flattenSearchResults(data.results || [])));
       setPage(nextPage);
     } catch {
       setError("Couldn't load more results.");
@@ -106,7 +77,7 @@ export default function SearchPage() {
     }
   };
 
-  const setFilter = (filter: FilterType) => {
+  const setFilter = (filter: TypeFilter) => {
     router.replace(
       { pathname: "/search", query: { q: query, ...(filter === "all" ? {} : { type: filter }) } },
       undefined,
@@ -117,15 +88,15 @@ export default function SearchPage() {
   const counts = useMemo(
     () =>
       Object.fromEntries(
-        FILTERS.map((filter) => [
+        TYPE_FILTERS.map((filter) => [
           filter.id,
-          results.filter((item) => matchesFilter(item, filter.id)).length,
+          results.filter((item) => matchesType(item, filter.id)).length,
         ])
-      ) as Record<FilterType, number>,
+      ) as Record<TypeFilter, number>,
     [results]
   );
 
-  const visibleResults = results.filter((item) => matchesFilter(item, activeFilter));
+  const visibleResults = results.filter((item) => matchesType(item, activeFilter));
 
   return (
     <main className="container discover-shell">
@@ -145,7 +116,7 @@ export default function SearchPage() {
 
         {query ? (
           <div className="discover-filter-row">
-            {FILTERS.map((filter) => (
+            {TYPE_FILTERS.map((filter) => (
               <button
                 key={filter.id}
                 className={activeFilter === filter.id ? "discover-chip active" : "discover-chip"}

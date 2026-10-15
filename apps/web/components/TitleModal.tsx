@@ -20,8 +20,18 @@ import {
   FaVolumeUp,
 } from "react-icons/fa";
 import DownloadDialog from "./DownloadDialog";
+import { RowScroller } from "./MediaRow";
 import EpisodeList, { EpisodeInfo } from "./EpisodeList";
 import { getMediaType, isAnimeItem, RoutableMediaItem } from "../utils/mediaRouting";
+import {
+  EXTRAS_PARAMS,
+  formatRuntime,
+  pickLogoUrl,
+  pickTrailerKey,
+  TmdbImages,
+  TmdbVideo,
+} from "../utils/mediaItems";
+import { posterUrl } from "../utils/posters";
 import type { MediaDownloadRequest } from "../utils/downloader";
 import { useMyList } from "../utils/myList";
 import { tmdbFetch } from "../utils/tmdbClient";
@@ -55,13 +65,6 @@ type RecommendationItem = RoutableMediaItem & {
   vote_average?: number;
 };
 
-type VideoItem = {
-  key?: string;
-  site?: string;
-  type?: string;
-  official?: boolean;
-};
-
 type TitleDetails = {
   title?: string;
   name?: string;
@@ -77,19 +80,18 @@ type TitleDetails = {
   number_of_episodes?: number;
   original_language?: string;
   genres?: { id: number; name: string }[];
-  credits?: { cast?: { name: string }[] };
+  credits?: { cast?: CastMember[] };
   recommendations?: { results?: RecommendationItem[] };
-  videos?: { results?: VideoItem[] };
+  videos?: { results?: TmdbVideo[] };
+  images?: TmdbImages;
 };
 
-function formatRuntime(minutes?: number): string | null {
-  if (!minutes || minutes <= 0) return null;
-
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  if (hours === 0) return `${remainingMinutes}m`;
-  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
-}
+type CastMember = {
+  id: number;
+  name: string;
+  character?: string;
+  profile_path?: string | null;
+};
 
 function TitleModal({
   titleRef,
@@ -106,6 +108,7 @@ function TitleModal({
   const [seasonNumber, setSeasonNumber] = useState(1);
   const [episodes, setEpisodes] = useState<EpisodeInfo[]>([]);
   const [isTrailerMuted, setIsTrailerMuted] = useState(true);
+  const [isTrailerPlaying, setIsTrailerPlaying] = useState(false);
   const [downloadingEpisode, setDownloadingEpisode] = useState<number | null>(null);
   const [downloadRequest, setDownloadRequest] = useState<MediaDownloadRequest | null>(null);
   const myList = useMyList();
@@ -122,7 +125,8 @@ function TitleModal({
     const fetchDetails = async () => {
       try {
         const data = await tmdbFetch<TitleDetails>(`${titleRef.mediaType}/${titleRef.id}`, {
-          append_to_response: "credits,recommendations,videos",
+          append_to_response: "credits,recommendations,videos,images",
+          ...EXTRAS_PARAMS,
         });
         if (!cancelled) setDetails(data);
       } catch {
@@ -209,28 +213,68 @@ function TitleModal({
       ? `https://image.tmdb.org/t/p/w780${details.poster_path}`
       : null;
 
-  const trailerKey = useMemo(() => {
-    const videos = (details?.videos?.results || []).filter(
-      (video) => video.site === "YouTube" && video.key
-    );
-    const trailer =
-      videos.find((video) => video.type === "Trailer" && video.official) ||
-      videos.find((video) => video.type === "Trailer") ||
-      videos.find((video) => video.type === "Teaser");
-    return trailer?.key || null;
-  }, [details?.videos]);
+  const trailerKey = useMemo(() => pickTrailerKey(details?.videos?.results), [details?.videos]);
+  const logoUrl = pickLogoUrl(details?.images);
 
-  const toggleTrailerMute = () => {
-    const frame = trailerFrameRef.current;
-    if (!frame?.contentWindow) return;
-
-    const command = isTrailerMuted ? "unMute" : "mute";
-    frame.contentWindow.postMessage(
-      JSON.stringify({ event: "command", func: command, args: [] }),
+  const sendTrailerCommand = (func: string, args: unknown[] = []) =>
+    trailerFrameRef.current?.contentWindow?.postMessage(
+      JSON.stringify({ event: "command", func, args }),
       "*"
     );
+
+  const toggleTrailerMute = () => {
+    sendTrailerCommand(isTrailerMuted ? "unMute" : "mute");
     setIsTrailerMuted(!isTrailerMuted);
   };
+
+  const listenToTrailer = () =>
+    trailerFrameRef.current?.contentWindow?.postMessage(
+      JSON.stringify({ event: "listening", id: 1, channel: "widget" }),
+      "*"
+    );
+
+  // The trailer only shows while it's playing, so YouTube's title bar, pause
+  // screen and end screen stay hidden behind the backdrop. Looping is done by
+  // seeking back instead of YouTube's loop, which flashes its UI. If YouTube
+  // never reports a state, show the player anyway so the trailer isn't lost.
+  useEffect(() => {
+    setIsTrailerPlaying(false);
+    if (!trailerKey) return;
+    let heardPlayer = false;
+    const handleMessage = (event: MessageEvent) => {
+      if (event.source !== trailerFrameRef.current?.contentWindow) return;
+      let data: { event?: string; info?: unknown };
+      try {
+        data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+      } catch {
+        return;
+      }
+      if (!heardPlayer) {
+        heardPlayer = true;
+        listenToTrailer();
+      }
+      const state =
+        data?.event === "onStateChange"
+          ? data.info
+          : data?.event === "infoDelivery"
+            ? (data.info as { playerState?: number } | undefined)?.playerState
+            : undefined;
+      if (typeof state !== "number") return;
+      setIsTrailerPlaying(state === 1 || state === 3);
+      if (state === 0) {
+        sendTrailerCommand("seekTo", [0, true]);
+        sendTrailerCommand("playVideo");
+      }
+    };
+    const fallback = window.setTimeout(() => {
+      if (!heardPlayer) setIsTrailerPlaying(true);
+    }, 5000);
+    window.addEventListener("message", handleMessage);
+    return () => {
+      window.clearTimeout(fallback);
+      window.removeEventListener("message", handleMessage);
+    };
+  }, [trailerKey]);
 
   const openDownloadDialog = (episode?: number) => {
     const downloadMarker = titleRef.mediaType === "movie" ? 0 : episode || 1;
@@ -258,7 +302,7 @@ function TitleModal({
     });
   };
 
-  const cast = (details?.credits?.cast || []).slice(0, 5).map((person) => person.name);
+  const cast = (details?.credits?.cast || []).slice(0, 15);
   const genres = (details?.genres || []).slice(0, 5).map((genre) => genre.name);
   const recommendations = useMemo(
     () =>
@@ -283,15 +327,19 @@ function TitleModal({
           </button>
 
           <div className="tm-backdrop">
+            {backdropUrl ? <img src={backdropUrl} alt="" /> : null}
+            <div className="tm-backdrop-fade" />
             {trailerKey ? (
               <>
-                <div className="tm-trailer">
+                <div className={isTrailerPlaying ? "tm-trailer playing" : "tm-trailer"}>
                   <iframe
                     ref={trailerFrameRef}
-                    src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&controls=0&rel=0&playsinline=1&loop=1&playlist=${trailerKey}&disablekb=1&fs=0&iv_load_policy=3&enablejsapi=1`}
+                    src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&controls=0&rel=0&playsinline=1&disablekb=1&fs=0&iv_load_policy=3&enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}`}
                     title={`${title} trailer`}
                     allow="autoplay; encrypted-media"
+                    onLoad={listenToTrailer}
                   />
+                  <div className="tm-trailer-fade" />
                 </div>
                 <button
                   className="tm-mute"
@@ -301,14 +349,15 @@ function TitleModal({
                   {isTrailerMuted ? <FaVolumeMute /> : <FaVolumeUp />}
                 </button>
               </>
-            ) : (
-              <>
-                {backdropUrl ? <img src={backdropUrl} alt="" /> : null}
-                <div className="tm-backdrop-fade" />
-              </>
-            )}
+            ) : null}
             <div className="tm-hero">
-              <h2 className="tm-title">{title}</h2>
+              {logoUrl ? (
+                <h2 className="tm-logo">
+                  <img src={logoUrl} alt={title} />
+                </h2>
+              ) : (
+                <h2 className="tm-title">{title}</h2>
+              )}
               <div className="tm-actions">
                 <button className="btn-play" onClick={handlePlay} disabled={!details}>
                   <FaPlay /> Play
@@ -367,11 +416,6 @@ function TitleModal({
                     </p>
                   </div>
                   <div className="tm-facts">
-                    {cast.length ? (
-                      <p>
-                        <span>Cast:</span> {cast.join(", ")}
-                      </p>
-                    ) : null}
                     {genres.length ? (
                       <p>
                         <span>Genres:</span> {genres.join(", ")}
@@ -384,6 +428,25 @@ function TitleModal({
                     ) : null}
                   </div>
                 </div>
+
+                {cast.length ? (
+                  <section className="tm-cast">
+                    <h3>Cast</h3>
+                    <RowScroller label="cast">
+                      {cast.map((person) => (
+                        <div key={person.id} className="cast-card">
+                          <img
+                            src={posterUrl(person.profile_path, "w185")}
+                            alt=""
+                            loading="lazy"
+                          />
+                          <strong>{person.name}</strong>
+                          {person.character ? <span>{person.character}</span> : null}
+                        </div>
+                      ))}
+                    </RowScroller>
+                  </section>
+                ) : null}
 
                 {titleRef.mediaType === "tv" ? (
                   <EpisodeList

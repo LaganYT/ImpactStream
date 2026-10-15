@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
+import { FaTimes } from "react-icons/fa";
+import { CardMeta, RowScroller, SectionHeader } from "./MediaRow";
 import {
   ContinueWatchingEntry,
   getResumeRoute,
+  isEpisodicType,
   listContinueWatching,
   removeProgress,
 } from "../utils/continueWatching";
+import { posterUrl } from "../utils/posters";
 
 function formatTimeRemaining(timestamp: number, duration: number): string {
   if (!duration) return "";
@@ -34,9 +38,7 @@ export default function ContinueWatchingRow({ maxItems = 12 }: ContinueWatchingR
     loadEntries();
   }, []);
 
-  const removeEntry = (event: React.MouseEvent, key: string) => {
-    event.stopPropagation();
-    event.preventDefault();
+  const removeEntry = (key: string) => {
     removeProgress(key);
     loadEntries();
   };
@@ -46,59 +48,50 @@ export default function ContinueWatchingRow({ maxItems = 12 }: ContinueWatchingR
   const visibleEntries = entries.slice(0, maxItems);
 
   return (
-    <div className="category discover-category cw-section">
-      <div className="cw-section-header">
-        <h3 className="cw-heading">Continue Watching</h3>
-      </div>
-      <div className="category-scroll">
+    <section className="media-row">
+      <SectionHeader title="Continue watching" subtitle="Pick up right where you left off" />
+      <RowScroller label="Continue watching">
         {visibleEntries.map((entry) => {
-          const posterUrl = entry.posterPath
-            ? `https://image.tmdb.org/t/p/w500${entry.posterPath}`
-            : "/no-image.svg";
-          const resumeRoute = getResumeRoute(entry);
           const progressPercent = Math.min(100, Math.max(0, entry.progress));
-          const subtitle =
-            entry.mediaType === "tv" || entry.mediaType === "anime:tv"
-              ? entry.seasonNumber && entry.episodeNumber
-                ? `S${entry.seasonNumber} E${entry.episodeNumber}`
-                : null
-              : null;
+          const episode =
+            isEpisodicType(entry.mediaType) && entry.seasonNumber && entry.episodeNumber
+              ? `S${entry.seasonNumber}.E${entry.episodeNumber}`
+              : undefined;
+          const timeLeft =
+            entry.timestamp > 0 && entry.duration > 0
+              ? formatTimeRemaining(entry.timestamp, entry.duration)
+              : undefined;
 
           return (
-            <div
-              key={entry.key}
-              className="category-item cw-card"
-              onClick={() => router.push(resumeRoute)}
-            >
-              <div className="cw-poster-wrap">
-                <img src={posterUrl} alt={entry.title} />
-                <button
-                  className="cw-remove-btn"
-                  onClick={(event) => removeEntry(event, entry.key)}
-                  aria-label={`Remove ${entry.title} from continue watching`}
-                  title="Remove"
-                >
-                  ✕
-                </button>
-                {progressPercent > 0 ? (
-                  <div className="cw-progress-bar">
-                    <div className="cw-progress-fill" style={{ width: `${progressPercent}%` }} />
-                  </div>
-                ) : null}
-              </div>
-              <div className="cw-card-footer">
-                <h4 className="cw-title">{entry.title}</h4>
-                {subtitle ? <p className="cw-subtitle">{subtitle}</p> : null}
-                {entry.timestamp > 0 && entry.duration > 0 ? (
-                  <p className="cw-time-left">
-                    {formatTimeRemaining(entry.timestamp, entry.duration)}
-                  </p>
-                ) : null}
-              </div>
+            <div key={entry.key} className="cw-card">
+              <button
+                type="button"
+                className="media-card media-card-poster"
+                onClick={() => router.push(getResumeRoute(entry))}
+              >
+                <span className="media-card-art">
+                  <img src={posterUrl(entry.posterPath)} alt="" loading="lazy" />
+                  {progressPercent > 0 ? (
+                    <span className="cw-progress-bar">
+                      <span className="cw-progress-fill" style={{ width: `${progressPercent}%` }} />
+                    </span>
+                  ) : null}
+                </span>
+                <span className="media-card-title">{entry.title}</span>
+                <CardMeta item={{ highlight: episode, details: [timeLeft] }} />
+              </button>
+              <button
+                className="icon-button cw-remove-btn"
+                onClick={() => removeEntry(entry.key)}
+                aria-label={`Remove ${entry.title} from continue watching`}
+                title="Remove"
+              >
+                <FaTimes />
+              </button>
             </div>
           );
         })}
-      </div>
-    </div>
+      </RowScroller>
+    </section>
   );
 }
