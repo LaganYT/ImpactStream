@@ -32,7 +32,15 @@ export default function Footer() {
           </a>
           ; this product uses the TMDB API but isn&apos;t endorsed or certified by TMDB.
         </p>
-        <p className="footer-note">&copy; {new Date().getFullYear()} ImpactStream</p>
+        <div className="footer-bottom">
+          <p className="footer-note">&copy; {new Date().getFullYear()} ImpactStream</p>
+          <nav className="footer-links footer-legal" aria-label="Site information">
+            <Link href="/help">Help</Link>
+            <Link href="/terms">Terms</Link>
+            <Link href="/privacy">Privacy</Link>
+            <Link href="/dmca">DMCA</Link>
+          </nav>
+        </div>
       </div>
     </footer>
   );
