@@ -422,6 +422,9 @@ button:active {
   color: #fff;
   width: 34px;
   height: 34px;
+  padding: 0;
+  display: grid;
+  place-items: center;
   border-radius: 8px;
   cursor: pointer;
   font-size: 1rem;
@@ -2112,7 +2115,7 @@ button:active {
 
 .tm-backdrop {
   position: relative;
-  aspect-ratio: 16 / 8.2;
+  aspect-ratio: 16 / 9;
   background: var(--surface-raised);
 }
 
@@ -2135,16 +2138,27 @@ button:active {
   overflow: hidden;
   pointer-events: none;
   background: #000;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.tm-trailer.playing {
+  opacity: 1;
 }
 
 .tm-trailer iframe {
-  position: absolute;
-  top: 50%;
-  left: 50%;
+  display: block;
   width: 100%;
   height: 100%;
-  transform: translate(-50%, -50%) scale(1.25);
   border: 0;
+}
+
+/* Softens the top edge where YouTube briefly shows the video title. */
+.tm-trailer-fade {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 22%;
+  background: linear-gradient(180deg, rgba(6, 8, 12, 0.85), transparent);
 }
 
 .tm-mute {

@@ -108,6 +108,7 @@ function TitleModal({
   const [seasonNumber, setSeasonNumber] = useState(1);
   const [episodes, setEpisodes] = useState<EpisodeInfo[]>([]);
   const [isTrailerMuted, setIsTrailerMuted] = useState(true);
+  const [isTrailerPlaying, setIsTrailerPlaying] = useState(false);
   const [downloadingEpisode, setDownloadingEpisode] = useState<number | null>(null);
   const [downloadRequest, setDownloadRequest] = useState<MediaDownloadRequest | null>(null);
   const myList = useMyList();
@@ -215,17 +216,41 @@ function TitleModal({
   const trailerKey = useMemo(() => pickTrailerKey(details?.videos?.results), [details?.videos]);
   const logoUrl = pickLogoUrl(details?.images);
 
-  const toggleTrailerMute = () => {
-    const frame = trailerFrameRef.current;
-    if (!frame?.contentWindow) return;
-
-    const command = isTrailerMuted ? "unMute" : "mute";
-    frame.contentWindow.postMessage(
-      JSON.stringify({ event: "command", func: command, args: [] }),
+  const sendTrailerCommand = (func: string, args: unknown[] = []) =>
+    trailerFrameRef.current?.contentWindow?.postMessage(
+      JSON.stringify({ event: "command", func, args }),
       "*"
     );
+
+  const toggleTrailerMute = () => {
+    sendTrailerCommand(isTrailerMuted ? "unMute" : "mute");
     setIsTrailerMuted(!isTrailerMuted);
   };
+
+  // The trailer only shows while it's playing, so YouTube's title bar, pause
+  // screen and end screen stay hidden behind the backdrop. Looping is done by
+  // seeking back instead of YouTube's loop, which flashes its UI.
+  useEffect(() => {
+    setIsTrailerPlaying(false);
+    if (!trailerKey) return;
+    const handleMessage = (event: MessageEvent) => {
+      if (event.source !== trailerFrameRef.current?.contentWindow) return;
+      let data: { event?: string; info?: unknown };
+      try {
+        data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+      } catch {
+        return;
+      }
+      if (data?.event !== "onStateChange") return;
+      setIsTrailerPlaying(data.info === 1 || data.info === 3);
+      if (data.info === 0) {
+        sendTrailerCommand("seekTo", [0, true]);
+        sendTrailerCommand("playVideo");
+      }
+    };
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [trailerKey]);
 
   const openDownloadDialog = (episode?: number) => {
     const downloadMarker = titleRef.mediaType === "movie" ? 0 : episode || 1;
@@ -278,15 +303,24 @@ function TitleModal({
           </button>
 
           <div className="tm-backdrop">
+            {backdropUrl ? <img src={backdropUrl} alt="" /> : null}
+            <div className="tm-backdrop-fade" />
             {trailerKey ? (
               <>
-                <div className="tm-trailer">
+                <div className={isTrailerPlaying ? "tm-trailer playing" : "tm-trailer"}>
                   <iframe
                     ref={trailerFrameRef}
-                    src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&controls=0&rel=0&playsinline=1&loop=1&playlist=${trailerKey}&disablekb=1&fs=0&iv_load_policy=3&enablejsapi=1`}
+                    src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&controls=0&rel=0&playsinline=1&disablekb=1&fs=0&iv_load_policy=3&enablejsapi=1`}
                     title={`${title} trailer`}
                     allow="autoplay; encrypted-media"
+                    onLoad={() =>
+                      trailerFrameRef.current?.contentWindow?.postMessage(
+                        JSON.stringify({ event: "listening", id: 1, channel: "widget" }),
+                        "*"
+                      )
+                    }
                   />
+                  <div className="tm-trailer-fade" />
                 </div>
                 <button
                   className="tm-mute"
@@ -296,12 +330,7 @@ function TitleModal({
                   {isTrailerMuted ? <FaVolumeMute /> : <FaVolumeUp />}
                 </button>
               </>
-            ) : (
-              <>
-                {backdropUrl ? <img src={backdropUrl} alt="" /> : null}
-                <div className="tm-backdrop-fade" />
-              </>
-            )}
+            ) : null}
             <div className="tm-hero">
               {logoUrl ? (
                 <h2 className="tm-logo">
