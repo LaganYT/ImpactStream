@@ -3170,8 +3170,13 @@ a.pg-channel:hover {
 }
 
 .nav-link.active {
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.nav-link.active svg {
+  opacity: 1;
 }
 
 .nav-divider {

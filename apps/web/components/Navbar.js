@@ -217,8 +217,10 @@ export default function Navbar() {
     setIsMobileMenuOpen(false);
   };
 
+  // Match the real URL: pathname is a template like "/browse/[type]".
+  const currentPath = router.asPath.split(/[?#]/)[0];
   const isActiveRoute = (href) =>
-    href === "/" ? router.pathname === "/" : router.pathname.startsWith(href);
+    href === "/" ? currentPath === "/" : currentPath === href || currentPath.startsWith(`${href}/`);
 
   return (
     <nav className={`navbar ${isScrolled || isMobileMenuOpen ? "navbar-scrolled" : ""}`}>
