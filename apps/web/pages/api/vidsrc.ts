@@ -7,7 +7,7 @@ type MediaRequest = {
   id: string;
 };
 
-const VIDFAST_BASE_URL = "https://vidfast.vc";
+const VIDY_BASE_URL = "https://www.vidy.st";
 
 function parseMediaRequest(req: NextApiRequest): MediaRequest | null {
   const input = req.method === "GET" ? req.query : req.body ?? {};
@@ -31,7 +31,7 @@ function parseMediaRequest(req: NextApiRequest): MediaRequest | null {
 
 function buildPlaybackUrl({ type, id }: MediaRequest) {
   const pathType = type === "movie" ? "movie" : "tv";
-  return `${VIDFAST_BASE_URL}/${pathType}/${id}`;
+  return `${VIDY_BASE_URL}/${pathType}/${id}`;
 }
 
 function shouldIncludeAlternatives(req: NextApiRequest) {

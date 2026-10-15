@@ -22,7 +22,7 @@ import {
 import DownloadDialog from "./DownloadDialog";
 import EpisodeList, { EpisodeInfo } from "./EpisodeList";
 import { getMediaType, isAnimeItem, RoutableMediaItem } from "../utils/mediaRouting";
-import type { MediaDownloadRequest } from "../utils/sheguDownloader";
+import type { MediaDownloadRequest } from "../utils/downloader";
 import { useMyList } from "../utils/myList";
 import { tmdbFetch } from "../utils/tmdbClient";
 

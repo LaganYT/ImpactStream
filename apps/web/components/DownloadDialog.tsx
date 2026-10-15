@@ -4,7 +4,7 @@ import {
   fetchDownloadLinks,
   type DownloadLink,
   type MediaDownloadRequest,
-} from "../utils/sheguDownloader";
+} from "../utils/downloader";
 
 type DownloadDialogProps = {
   request: MediaDownloadRequest;
@@ -34,7 +34,7 @@ export default function DownloadDialog({ request, onClose }: DownloadDialogProps
     setMessage("Finding direct downloads");
     setLinks([]);
 
-    fetchDownloadLinks(request, controller.signal)
+    fetchDownloadLinks(request, controller.signal, setLinks)
       .then((downloadLinks) => {
         setLinks(downloadLinks);
         setMessage(
@@ -122,7 +122,7 @@ export default function DownloadDialog({ request, onClose }: DownloadDialogProps
                 <strong style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{link.name}</strong>
                 <span style={{ fontWeight: 800 }}>{formatQuality(link)}</span>
                 <span style={{ opacity: 0.7, fontSize: "0.85rem" }}>
-                  {link.source} · {link.provider}
+                  {link.provider}
                 </span>
                 <span style={{ opacity: 0.8, fontSize: "0.85rem", fontWeight: 700 }}>{link.size}</span>
               </a>

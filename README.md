@@ -39,7 +39,7 @@ The TMDB key is only read on the server. The browser reaches TMDB through `/api/
 Optional web configuration:
 
 ```env
-NEXT_PUBLIC_DOWNLOAD_API_URL=https://downloads.shegu.st
+NEXT_PUBLIC_DOWNLOAD_API_URL=https://hahaevilcraft.site/download-api/scrape/source
 ```
 
 ## Development

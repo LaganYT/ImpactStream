@@ -10,13 +10,13 @@ import {
 } from "../utils/continueWatching";
 import { tmdbFetch } from "../utils/tmdbClient";
 import {
-  buildVidfastMovieUrl,
-  buildVidfastTvUrl,
-  getVidfastMediaEntry,
-  parseVidfastMessageData,
+  buildVidyMovieUrl,
+  buildVidyTvUrl,
+  getVidyMediaEntry,
+  parseVidyMessageData,
   toContinueProgress,
-  VIDFAST_ORIGIN,
-} from "../utils/vidfast";
+  VIDY_ORIGIN,
+} from "../utils/vidy";
 
 export type PlaybackDetails = {
   title?: string;
@@ -40,7 +40,7 @@ const sameEpisode = (a: EpisodeRef, b: EpisodeRef) =>
 
 // Shared state for the movie, TV, and anime watch pages: loads TMDB details,
 // restores and persists continue-watching progress, tracks the active episode,
-// and builds the Vidfast embed URL.
+// and builds the Vidy embed URL.
 export function useMediaPlayback({
   tmdbId,
   mediaType,
@@ -195,9 +195,9 @@ export function useMediaPlayback({
     if (!tmdbId || !isProgressLoaded) return;
 
     const handleMessage = (event: MessageEvent) => {
-      if (event.origin !== VIDFAST_ORIGIN) return;
+      if (event.origin !== VIDY_ORIGIN) return;
 
-      const message = parseVidfastMessageData(event.data) as {
+      const message = parseVidyMessageData(event.data) as {
         type?: string;
         data?: { event?: string } & Record<string, unknown>;
       } | null;
@@ -210,17 +210,15 @@ export function useMediaPlayback({
 
       if (message.type !== "MEDIA_DATA") return;
 
-      window.localStorage.setItem("vidFastProgress", JSON.stringify(message.data));
-
-      const mediaEntry = getVidfastMediaEntry(message.data, tmdbId);
-      if (!mediaEntry || mediaEntry.type !== tmdbType) return;
+      const mediaEntry = getVidyMediaEntry(message.data, tmdbType, tmdbId);
+      if (!mediaEntry) return;
 
       const { season, episode } = currentRef.current;
       const next = toContinueProgress(mediaEntry, season, episode);
       const nextSeason = isEpisodic ? next.seasonNumber || season : 1;
       const nextEpisode = isEpisodic ? next.episodeNumber || episode : 1;
 
-      // Vidfast can advance episodes on its own (autoNext); follow it.
+      // Vidy can advance episodes on its own (autoplayNextEpisode param); follow it.
       if (isEpisodic && (nextSeason !== season || nextEpisode !== episode)) {
         setCurrent({ season: nextSeason, episode: nextEpisode });
       }
@@ -284,8 +282,8 @@ export function useMediaPlayback({
     (startAt: number, autoNext = true) => {
       if (!tmdbId) return "";
       return isEpisodic
-        ? buildVidfastTvUrl(tmdbId, loaded.season, loaded.episode, startAt, autoNext)
-        : buildVidfastMovieUrl(tmdbId, startAt);
+        ? buildVidyTvUrl(tmdbId, loaded.season, loaded.episode, startAt, autoNext)
+        : buildVidyMovieUrl(tmdbId, startAt);
     },
     [tmdbId, isEpisodic, loaded.season, loaded.episode]
   );
