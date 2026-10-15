@@ -13,6 +13,7 @@ const ALLOWED_PATHS = [
   /^tv\/(popular|top_rated|airing_today|on_the_air)$/,
   /^(movie|tv)\/\d+$/,
   /^tv\/\d+\/season\/\d+$/,
+  /^watch\/providers\/(movie|tv)$/,
 ];
 
 const ALLOWED_PARAMS = new Set([
@@ -30,6 +31,9 @@ const ALLOWED_PARAMS = new Set([
   "primary_release_date.gte",
   "primary_release_date.lte",
   "without_genres",
+  "with_watch_providers",
+  "watch_region",
+  "include_image_language",
 ]);
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {

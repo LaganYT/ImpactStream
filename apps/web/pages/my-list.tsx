@@ -40,7 +40,7 @@ export default function MyListPage() {
               key: itemKey(item),
               title: item.title,
               posterUrl: posterUrl(item.posterPath),
-              label: item.isAnime ? "ANIME" : item.mediaType === "tv" ? "TV" : "MOVIE",
+              label: item.isAnime ? "Anime" : item.mediaType === "tv" ? "Show" : "Movie",
               year: item.year,
               rating: item.rating,
             }))}

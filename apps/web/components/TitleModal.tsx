@@ -20,8 +20,18 @@ import {
   FaVolumeUp,
 } from "react-icons/fa";
 import DownloadDialog from "./DownloadDialog";
+import { RowScroller } from "./MediaRow";
 import EpisodeList, { EpisodeInfo } from "./EpisodeList";
 import { getMediaType, isAnimeItem, RoutableMediaItem } from "../utils/mediaRouting";
+import {
+  EXTRAS_PARAMS,
+  formatRuntime,
+  pickLogoUrl,
+  pickTrailerKey,
+  TmdbImages,
+  TmdbVideo,
+} from "../utils/mediaItems";
+import { posterUrl } from "../utils/posters";
 import type { MediaDownloadRequest } from "../utils/downloader";
 import { useMyList } from "../utils/myList";
 import { tmdbFetch } from "../utils/tmdbClient";
@@ -55,13 +65,6 @@ type RecommendationItem = RoutableMediaItem & {
   vote_average?: number;
 };
 
-type VideoItem = {
-  key?: string;
-  site?: string;
-  type?: string;
-  official?: boolean;
-};
-
 type TitleDetails = {
   title?: string;
   name?: string;
@@ -77,19 +80,18 @@ type TitleDetails = {
   number_of_episodes?: number;
   original_language?: string;
   genres?: { id: number; name: string }[];
-  credits?: { cast?: { name: string }[] };
+  credits?: { cast?: CastMember[] };
   recommendations?: { results?: RecommendationItem[] };
-  videos?: { results?: VideoItem[] };
+  videos?: { results?: TmdbVideo[] };
+  images?: TmdbImages;
 };
 
-function formatRuntime(minutes?: number): string | null {
-  if (!minutes || minutes <= 0) return null;
-
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  if (hours === 0) return `${remainingMinutes}m`;
-  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
-}
+type CastMember = {
+  id: number;
+  name: string;
+  character?: string;
+  profile_path?: string | null;
+};
 
 function TitleModal({
   titleRef,
@@ -122,7 +124,8 @@ function TitleModal({
     const fetchDetails = async () => {
       try {
         const data = await tmdbFetch<TitleDetails>(`${titleRef.mediaType}/${titleRef.id}`, {
-          append_to_response: "credits,recommendations,videos",
+          append_to_response: "credits,recommendations,videos,images",
+          ...EXTRAS_PARAMS,
         });
         if (!cancelled) setDetails(data);
       } catch {
@@ -209,16 +212,8 @@ function TitleModal({
       ? `https://image.tmdb.org/t/p/w780${details.poster_path}`
       : null;
 
-  const trailerKey = useMemo(() => {
-    const videos = (details?.videos?.results || []).filter(
-      (video) => video.site === "YouTube" && video.key
-    );
-    const trailer =
-      videos.find((video) => video.type === "Trailer" && video.official) ||
-      videos.find((video) => video.type === "Trailer") ||
-      videos.find((video) => video.type === "Teaser");
-    return trailer?.key || null;
-  }, [details?.videos]);
+  const trailerKey = useMemo(() => pickTrailerKey(details?.videos?.results), [details?.videos]);
+  const logoUrl = pickLogoUrl(details?.images);
 
   const toggleTrailerMute = () => {
     const frame = trailerFrameRef.current;
@@ -258,7 +253,7 @@ function TitleModal({
     });
   };
 
-  const cast = (details?.credits?.cast || []).slice(0, 5).map((person) => person.name);
+  const cast = (details?.credits?.cast || []).slice(0, 15);
   const genres = (details?.genres || []).slice(0, 5).map((genre) => genre.name);
   const recommendations = useMemo(
     () =>
@@ -308,7 +303,13 @@ function TitleModal({
               </>
             )}
             <div className="tm-hero">
-              <h2 className="tm-title">{title}</h2>
+              {logoUrl ? (
+                <h2 className="tm-logo">
+                  <img src={logoUrl} alt={title} />
+                </h2>
+              ) : (
+                <h2 className="tm-title">{title}</h2>
+              )}
               <div className="tm-actions">
                 <button className="btn-play" onClick={handlePlay} disabled={!details}>
                   <FaPlay /> Play
@@ -367,11 +368,6 @@ function TitleModal({
                     </p>
                   </div>
                   <div className="tm-facts">
-                    {cast.length ? (
-                      <p>
-                        <span>Cast:</span> {cast.join(", ")}
-                      </p>
-                    ) : null}
                     {genres.length ? (
                       <p>
                         <span>Genres:</span> {genres.join(", ")}
@@ -384,6 +380,25 @@ function TitleModal({
                     ) : null}
                   </div>
                 </div>
+
+                {cast.length ? (
+                  <section className="tm-cast">
+                    <h3>Cast</h3>
+                    <RowScroller label="cast">
+                      {cast.map((person) => (
+                        <div key={person.id} className="cast-card">
+                          <img
+                            src={posterUrl(person.profile_path, "w185")}
+                            alt=""
+                            loading="lazy"
+                          />
+                          <strong>{person.name}</strong>
+                          {person.character ? <span>{person.character}</span> : null}
+                        </div>
+                      ))}
+                    </RowScroller>
+                  </section>
+                ) : null}
 
                 {titleRef.mediaType === "tv" ? (
                   <EpisodeList

@@ -1,4 +1,5 @@
 import { FaTimes } from "react-icons/fa";
+import { MediaCard } from "./MediaRow";
 
 export type PosterGridItem = {
   key: string;
@@ -19,34 +20,29 @@ export default function PosterGrid({ items, onSelect, onRemove }: Props) {
   return (
     <div className="discover-grid">
       {items.map((item) => (
-        <article key={item.key} className="discover-card" onClick={() => onSelect(item)}>
-          <div className="poster-grid-image">
-            <img src={item.posterUrl} alt={item.title} loading="lazy" />
-            {onRemove ? (
-              <button
-                className="cw-remove-btn"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onRemove(item);
-                }}
-                aria-label={`Remove ${item.title}`}
-                title="Remove"
-              >
-                <FaTimes />
-              </button>
-            ) : null}
-          </div>
-          <div className="discover-card-content">
-            {item.label ? <span className="discover-pill">{item.label}</span> : null}
-            <h3>{item.title}</h3>
-            <p>
-              {item.year || "N/A"}
-              {typeof item.rating === "number" && item.rating > 0
-                ? ` • ⭐ ${item.rating.toFixed(1)}`
-                : ""}
-            </p>
-          </div>
-        </article>
+        <div key={item.key} className="grid-cell">
+          <MediaCard
+            shape="poster"
+            item={{
+              id: item.key,
+              title: item.title,
+              imageUrl: item.posterUrl,
+              rating: item.rating,
+              details: [item.year, item.label],
+            }}
+            onClick={() => onSelect(item)}
+          />
+          {onRemove ? (
+            <button
+              className="icon-button cw-remove-btn"
+              onClick={() => onRemove(item)}
+              aria-label={`Remove ${item.title}`}
+              title="Remove"
+            >
+              <FaTimes />
+            </button>
+          ) : null}
+        </div>
       ))}
     </div>
   );
