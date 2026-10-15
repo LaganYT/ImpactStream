@@ -227,12 +227,20 @@ function TitleModal({
     setIsTrailerMuted(!isTrailerMuted);
   };
 
+  const listenToTrailer = () =>
+    trailerFrameRef.current?.contentWindow?.postMessage(
+      JSON.stringify({ event: "listening", id: 1, channel: "widget" }),
+      "*"
+    );
+
   // The trailer only shows while it's playing, so YouTube's title bar, pause
   // screen and end screen stay hidden behind the backdrop. Looping is done by
-  // seeking back instead of YouTube's loop, which flashes its UI.
+  // seeking back instead of YouTube's loop, which flashes its UI. If YouTube
+  // never reports a state, show the player anyway so the trailer isn't lost.
   useEffect(() => {
     setIsTrailerPlaying(false);
     if (!trailerKey) return;
+    let heardPlayer = false;
     const handleMessage = (event: MessageEvent) => {
       if (event.source !== trailerFrameRef.current?.contentWindow) return;
       let data: { event?: string; info?: unknown };
@@ -241,15 +249,31 @@ function TitleModal({
       } catch {
         return;
       }
-      if (data?.event !== "onStateChange") return;
-      setIsTrailerPlaying(data.info === 1 || data.info === 3);
-      if (data.info === 0) {
+      if (!heardPlayer) {
+        heardPlayer = true;
+        listenToTrailer();
+      }
+      const state =
+        data?.event === "onStateChange"
+          ? data.info
+          : data?.event === "infoDelivery"
+            ? (data.info as { playerState?: number } | undefined)?.playerState
+            : undefined;
+      if (typeof state !== "number") return;
+      setIsTrailerPlaying(state === 1 || state === 3);
+      if (state === 0) {
         sendTrailerCommand("seekTo", [0, true]);
         sendTrailerCommand("playVideo");
       }
     };
+    const fallback = window.setTimeout(() => {
+      if (!heardPlayer) setIsTrailerPlaying(true);
+    }, 5000);
     window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
+    return () => {
+      window.clearTimeout(fallback);
+      window.removeEventListener("message", handleMessage);
+    };
   }, [trailerKey]);
 
   const openDownloadDialog = (episode?: number) => {
@@ -310,15 +334,10 @@ function TitleModal({
                 <div className={isTrailerPlaying ? "tm-trailer playing" : "tm-trailer"}>
                   <iframe
                     ref={trailerFrameRef}
-                    src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&controls=0&rel=0&playsinline=1&disablekb=1&fs=0&iv_load_policy=3&enablejsapi=1`}
+                    src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&controls=0&rel=0&playsinline=1&disablekb=1&fs=0&iv_load_policy=3&enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}`}
                     title={`${title} trailer`}
                     allow="autoplay; encrypted-media"
-                    onLoad={() =>
-                      trailerFrameRef.current?.contentWindow?.postMessage(
-                        JSON.stringify({ event: "listening", id: 1, channel: "widget" }),
-                        "*"
-                      )
-                    }
+                    onLoad={listenToTrailer}
                   />
                   <div className="tm-trailer-fade" />
                 </div>
